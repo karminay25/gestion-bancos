@@ -1,0 +1,20 @@
+import { createClient } from '@supabase/supabase-js';
+import dotenv from 'dotenv';
+dotenv.config({ path: '.env.local' });
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
+
+async function listAccounts() {
+    const { data } = await supabase
+        .from('cuentas_bancarias')
+        .select('id, banco, descripcion, moneda, empresa_id, empresas(codigo)');
+    
+    data?.forEach(a => {
+        console.log(`${a.id} | ${a.banco} | ${a.descripcion} | ${a.moneda} | ${(a.empresas as any)?.codigo}`);
+    });
+}
+
+listAccounts();

@@ -1,0 +1,40 @@
+{
+  "name": "gestion-bancos",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --webpack",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.103.0",
+    "@types/mailparser": "^3.4.6",
+    "@types/node-imap": "^0.9.3",
+    "clsx": "^2.1.1",
+    "date-fns": "^4.1.0",
+    "dotenv": "^17.4.2",
+    "fast-xml-parser": "^5.7.3",
+    "framer-motion": "^12.38.0",
+    "lucide-react": "^1.8.0",
+    "mailparser": "^3.9.8",
+    "next": "16.2.3",
+    "node-imap": "^0.9.6",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "recharts": "^3.8.1",
+    "tailwind-merge": "^3.5.0",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.2.3",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  }
+}

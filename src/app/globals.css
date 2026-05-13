@@ -1,0 +1,74 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+:root {
+  --background: oklch(0.98 0.01 250);
+  --foreground: oklch(0.15 0.02 250);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.15 0.02 250);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.15 0.02 250);
+  --primary: oklch(0.45 0.15 250); /* Deep Blue/Purple */
+  --primary-foreground: oklch(0.98 0.01 250);
+  --secondary: oklch(0.9 0.03 250);
+  --secondary-foreground: oklch(0.15 0.02 250);
+  --muted: oklch(0.95 0.02 250);
+  --muted-foreground: oklch(0.45 0.05 250);
+  --accent: oklch(0.45 0.15 250);
+  --accent-foreground: oklch(0.98 0.01 250);
+  --destructive: oklch(0.55 0.2 25);
+  --destructive-foreground: oklch(0.98 0.01 250);
+  --border: oklch(0.9 0.03 250);
+  --input: oklch(0.9 0.03 250);
+  --ring: oklch(0.45 0.15 250);
+  --radius: 0.75rem;
+}
+
+.dark {
+  --background: oklch(0.1 0.02 250);
+  --foreground: oklch(0.98 0.01 250);
+  --card: oklch(0.15 0.03 250);
+  --card-foreground: oklch(0.98 0.01 250);
+  --popover: oklch(0.15 0.03 250);
+  --popover-foreground: oklch(0.98 0.01 250);
+  --primary: oklch(0.6 0.15 250);
+  --primary-foreground: oklch(0.1 0.02 250);
+  --secondary: oklch(0.2 0.03 250);
+  --secondary-foreground: oklch(0.98 0.01 250);
+  --muted: oklch(0.2 0.03 250);
+  --muted-foreground: oklch(0.7 0.05 250);
+  --accent: oklch(0.6 0.15 250);
+  --accent-foreground: oklch(0.1 0.02 250);
+  --destructive: oklch(0.4 0.15 25);
+  --destructive-foreground: oklch(0.98 0.01 250);
+  --border: oklch(0.2 0.03 250);
+  --input: oklch(0.2 0.03 250);
+  --ring: oklch(0.6 0.15 250);
+}
+
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+    @apply font-sans antialiased;
+  }
+}
+
+.glass {
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.dark .glass {
+  background: rgba(0, 0, 10, 0.4);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
