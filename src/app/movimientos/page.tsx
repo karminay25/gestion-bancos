@@ -118,9 +118,13 @@ function AccountLedger({ account, movements, costCenters, terceros, onRefresh }:
         
         // 1. Get the current movement to know its raw history
         const move = movementsWithBalance.find(m => m.id === moveId);
-        const originalRaw = move?.nombre_tercero || '';
-
-        // 2. Update the movement itself
+        if (!move) {
+            alert('Movimiento no encontrado');
+            return;
+        }
+        const originalRaw = move.nombre_tercero;
+        const empresaId = move.cuentas_bancarias?.empresa_id;
+        
         const { error } = await supabase.from('movimientos').update({ nombre_tercero: newValue }).eq('id', moveId);
         
         if (error) {
@@ -128,7 +132,6 @@ function AccountLedger({ account, movements, costCenters, terceros, onRefresh }:
         } else {
             // 3. "LEARNING MODE": Update or create mapping in Terceros directory
             // We search for a match specific to this company first
-            const empresaId = move.cuentas_bancarias?.empresa_id;
             const { data: existing } = await supabase.from('terceros')
                 .select('*')
                 .eq('nombre_raw', originalRaw)
@@ -186,6 +189,7 @@ function AccountLedger({ account, movements, costCenters, terceros, onRefresh }:
     };
 
     const handleBulkClean = async () => {
+        // Removed redundant RawMovement interface inside bulk clean function
         const toUpdate = filteredItems.filter(m => {
             const terc = terceros.find(t => t.nombre_raw === m.nombre_tercero);
             return terc && terc.nombre_canonico !== m.nombre_tercero;
@@ -401,7 +405,6 @@ function AccountLedger({ account, movements, costCenters, terceros, onRefresh }:
                                 <td className="px-5 py-5 min-w-[220px]">
                                     <div className="space-y-1">
                                         {(() => {
-                                            const empresaId = move.cuentas_bancarias?.empresa_id;
                                             // Find mapping: prioritize company-specific over global
                                             const terc = terceros
                                                 .filter(t => t.nombre_raw === move.nombre_tercero)

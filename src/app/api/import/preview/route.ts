@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
         const buffer = Buffer.from(await file.arrayBuffer());
         const fileName = file.name.toUpperCase();
         
-        let result = { detectedCompany: null as any, movements: [] as any[] };
+        let result: { detectedCompany: any; movements: any[]; suggestedInitialBalance?: number | null } = { detectedCompany: null as any, movements: [] as any[] };
 
         // Auto-detect bank format
         if (fileName.includes('RSM')) {

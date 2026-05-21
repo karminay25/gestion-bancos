@@ -22,11 +22,10 @@ export interface Movement {
  * Sorts movements chronologically.
  * Uses fecha as primary sort and created_at as tie-breaker for perfect Excel mirroring.
  */
-export function sortMovements(movements: Movement[]): Movement[] {
+export function sortMovements<T extends { fecha: string; created_at?: string }>(movements: T[]): T[] {
     return [...movements].sort((a, b) => {
         const dateCompare = a.fecha.localeCompare(b.fecha);
         if (dateCompare !== 0) return dateCompare;
-        // Use created_at as tie-breaker to preserve import order
         return (a.created_at || '').localeCompare(b.created_at || '');
     });
 }

@@ -89,6 +89,7 @@ export function parseMonex(buffer: Buffer) {
             concepto,
             referencia,
             descripcion: nombre,
+            proveedor: nombre, // new field
             monto: Math.abs(importe),
             tipo: importe > 0 ? 'Ingreso' : 'Egreso'
         });

@@ -1,5 +1,5 @@
-import { syncInvoicesFromEmail } from './src/lib/emailProcessor.ts';
-import { matchInvoicesWithMovements } from './src/lib/invoiceMatcher.ts';
+import { syncInvoicesFromEmail } from './src/lib/emailProcessor';
+import { matchInvoicesWithMovements } from './src/lib/invoiceMatcher';
 import * as dotenv from 'dotenv';
 dotenv.config({ path: '.env.local' });
 

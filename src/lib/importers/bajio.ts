@@ -101,15 +101,17 @@ export function parseBajio(buffer: Buffer) {
 
         if (cargos === 0 && abonos === 0) continue;
 
-        movements.push({
-            fecha,
-            concepto: descripcion.substring(0, 255),
-            descripcion: extractNombreBajio(descripcion),
-            monto: Math.abs(cargos || abonos), // Ensure absolute value
-            tipo: abonos > 0 ? 'Ingreso' : 'Egreso',
-            saldo_excel: saldo,
-            moneda: detectedCurrency
-        });
+movements.push({
+    fecha,
+    concepto: descripcion.substring(0, 255),
+    referencia: '',
+    descripcion: extractNombreBajio(descripcion),
+    proveedor: extractNombreBajio(descripcion), // new field
+    monto: Math.abs(cargos || abonos), // Ensure absolute value
+    tipo: abonos > 0 ? 'Ingreso' : 'Egreso',
+    saldo_excel: saldo,
+    moneda: detectedCurrency
+});
     }
 
     // Sort all movements by date ascending to ensure consistent order
