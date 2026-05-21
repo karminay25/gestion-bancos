@@ -13,8 +13,8 @@ async function findFuture() {
         .select('*, cuentas_bancarias(descripcion)')
         .gte('fecha', '2026-07-01');
     
-    console.log('Future movements in DB:');
-    console.table(data.map(d => ({
+    const rows = data ?? [];
+    console.table(rows.map(d => ({
         fecha: d.fecha,
         cuenta: d.cuentas_bancarias.descripcion,
         monto: d.monto,
