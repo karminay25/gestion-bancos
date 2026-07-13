@@ -20,11 +20,11 @@ function isUnlinkedMovement(facturaField: string | null): boolean {
 }
 
 export async function matchInvoicesWithMovements() {
-    // 1. Fetch pending invoices
+    // 1. Fetch pending AND suggested invoices (retry matching on both)
     const { data: facturas } = await supabase
         .from('facturas')
         .select('*')
-        .eq('estado', 'PENDIENTE_VINCULO');
+        .in('estado', ['PENDIENTE_VINCULO', 'CON_SUGERENCIAS']);
 
     if (!facturas || facturas.length === 0) return { matched: 0, suggested: 0 };
 
@@ -85,7 +85,7 @@ export async function matchInvoicesWithMovements() {
         });
 
         // 4. Try to find best match by name similarity
-        const bestMatch = filteredMovs.find(m => {
+        let bestMatch = filteredMovs.find(m => {
             // Prefer match on provider if present
             if (m.proveedor && isSimilar(m.proveedor, factura.emisor_nombre)) return true;
             // Fallback to existing checks
@@ -93,8 +93,28 @@ export async function matchInvoicesWithMovements() {
                 isSimilar(m.concepto, factura.emisor_nombre);
         });
 
+        let needsNameUpdate = false;
+
+        // 5. Autolink "POR IDENTIFICAR" movements by exact amount and tight date
+        if (!bestMatch) {
+            const tightMatches = filteredMovs.filter(m => {
+                const timeM = m.fecha ? new Date(m.fecha).getTime() : 0;
+                const timeFact = factura.fecha_emision ? new Date(factura.fecha_emision).getTime() : 0;
+                const diffDays = Math.abs(timeM - timeFact) / (1000 * 3600 * 24);
+                
+                // Si el nombre no está identificado y coincide exacto en un rango de 5 días
+                return diffDays <= 5 && (!m.nombre_tercero || m.nombre_tercero === 'POR IDENTIFICAR');
+            });
+
+            // Solo vincular automático si hay exactamente UN candidato perfecto para no equivocarnos
+            if (tightMatches.length === 1) {
+                bestMatch = tightMatches[0];
+                needsNameUpdate = true;
+            }
+        }
+
         if (bestMatch) {
-            await linkInvoiceToMovement(factura.id, bestMatch.id, factura, bestMatch);
+            await linkInvoiceToMovement(factura.id, bestMatch.id, factura, bestMatch, needsNameUpdate);
             perfectMatches++;
         } else {
             // Movements exist with the right amount but name doesn't match — suggest to user
@@ -154,7 +174,8 @@ async function linkInvoiceToMovement(
     facturaId: string,
     movimientoId: string,
     factura: Record<string, unknown>,
-    movement: Record<string, unknown>
+    movement: Record<string, unknown>,
+    updateName: boolean = false // kept for compat, logic now auto-detects
 ) {
     // Build the new label: preserve the existing [BANCO: ...] portion + add the folio
     const existingField = (movement.factura as string) || '';
@@ -162,10 +183,19 @@ async function linkInvoiceToMovement(
     const bancoSuffix = bancoMatch ? ` ${bancoMatch[0]}` : '';
     const folioLabel = `${factura.folio || 'FAC'} - ${factura.emisor_nombre}${bancoSuffix}`;
 
-    // Update the movement with the invoice label (preserving bank balance info)
+    const updatePayload: Record<string, any> = { factura: folioLabel };
+    
+    // Always update nombre_tercero if the movement has no name or is "POR IDENTIFICAR"
+    // This applies whether the link was auto or manual, tight or loose
+    const currentName = (movement.nombre_tercero as string) || '';
+    if (factura.emisor_nombre && (!currentName || currentName === 'POR IDENTIFICAR')) {
+        updatePayload.nombre_tercero = factura.emisor_nombre;
+    }
+
+    // Update the movement with the invoice label and the extracted provider name
     await supabase
         .from('movimientos')
-        .update({ factura: folioLabel })
+        .update(updatePayload)
         .eq('id', movimientoId);
 
     // Mark the invoice as linked
@@ -174,3 +204,4 @@ async function linkInvoiceToMovement(
         .update({ movimiento_id: movimientoId, estado: 'VINCULADA' })
         .eq('id', facturaId);
 }
+

@@ -158,10 +158,17 @@ export function ManualLinkModal({ invoice, onClose, onSuccess }: ManualLinkModal
             const bancoSuffix = bancoMatch ? ` ${bancoMatch[0]}` : '';
             const label = `${invoice.folio || 'FAC'} - ${invoice.emisor_nombre}${bancoSuffix}`;
 
+            // Build update payload — also enrich nombre_tercero if it's empty or unidentified
+            const movUpdatePayload: Record<string, any> = { factura: label };
+            const currentName = movement?.nombre_tercero || '';
+            if (invoice.emisor_nombre && (!currentName || currentName === 'POR IDENTIFICAR')) {
+                movUpdatePayload.nombre_tercero = invoice.emisor_nombre;
+            }
+
             // 1. Update movement
             await supabase
                 .from('movimientos')
-                .update({ factura: label })
+                .update(movUpdatePayload)
                 .eq('id', moveId);
 
             // 2. Update invoice

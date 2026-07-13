@@ -4,7 +4,7 @@ import { useEffect, useState, useMemo } from "react";
 import { 
   BarChart3, PieChart as PieChartIcon, TrendingUp, Calendar,
   Building2, Users, Filter, ArrowUpRight, ArrowDownRight,
-  Loader2, CalendarDays, Leaf, Hash
+  Loader2, CalendarDays, Leaf, Hash, Tag
 } from "lucide-react";
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -16,6 +16,36 @@ import { es } from "date-fns/locale";
 
 const COLORS = ["#6366f1","#10b981","#f59e0b","#ec4899","#8b5cf6","#06b6d4","#f43f5e","#84cc16"];
 
+const ARCHIVED_COST_CENTERS = new Set([
+  'ACTIVO LOLA',
+  'AGRICOLA OBA',
+  'AOO',
+  'BOSBEA',
+  'BOSBSES',
+  'CFRV',
+  'CRFV',
+  'JFV',
+  'LACM',
+  'LOA',
+  'LOLA',
+  'LOLA/BOSBES',
+  'LOLA/BOSBES/OBA',
+  'LOLA/OBA',
+  'OBA/BOSBES',
+  'OBA/LOLA',
+  'PRO',
+  'PROCESO',
+  'SOCIIO JFV',
+  'SOCIO',
+  'SOCIO CARLOS',
+  'SOCIO JOSE',
+  'SOCIO LUIS',
+  'SOCIOS CARLOS',
+  'NOMINA',
+  'TRASPASOS',
+  'GASOLINA'
+]);
+
 export default function AnalisisPage() {
   const [loading, setLoading] = useState(true);
   const [movements, setMovements] = useState<any[]>([]);
@@ -24,29 +54,77 @@ export default function AnalisisPage() {
   const [costCenters, setCostCenters] = useState<any[]>([]);
   const [selectedCompany, setSelectedCompany] = useState<string>("all");
   const [selectedSeason, setSelectedSeason] = useState<string>("all");
+  const [selectedCC, setSelectedCC] = useState<string>("all");
+  const [selectedCurrency, setSelectedCurrency] = useState<"MXN" | "USD">("MXN");
   const [timeRange, setTimeRange] = useState<"week"|"month"|"year"|"all">("all");
   const [isMounted, setIsMounted] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 20;
+  const [manuallyActivatedCCNames, setManuallyActivatedCCNames] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('manually_activated_ccs');
+      if (stored) {
+        setManuallyActivatedCCNames(new Set(JSON.parse(stored)));
+      }
+    } catch (e) {
+      console.error('Error loading activated CCs:', e);
+    }
+  }, []);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedCompany, selectedSeason, selectedCC, selectedCurrency, timeRange]);
 
   useEffect(() => {
     async function fetchData() {
       setLoading(true);
-      const [
-        { data: movs }, { data: comp }, { data: seas }, { data: cc }
-      ] = await Promise.all([
-        supabase.from('movimientos').select('*, cuentas_bancarias(moneda, empresas(id, codigo)), centros_costo(nombre), temporadas(nombre)'),
+      
+      // Fetch metadata in parallel
+      const [compRes, seasRes, ccRes] = await Promise.all([
         supabase.from('empresas').select('*'),
         supabase.from('temporadas').select('*').order('created_at', { ascending: false }),
-        supabase.from('centros_costo').select('*')
+        supabase.from('centros_costo').select('*').order('nombre')
       ]);
-      if (movs) setMovements(movs);
-      if (comp) setCompanies(comp);
-      if (seas) {
-        setSeasons(seas);
+
+      if (compRes.data) setCompanies(compRes.data);
+      if (seasRes.data) {
+        setSeasons(seasRes.data);
         // Auto-select active season
-        const active = seas.find((s: any) => s.fecha_inicio && !s.fecha_fin);
+        const active = seasRes.data.find((s: any) => s.fecha_inicio && !s.fecha_fin);
         if (active) setSelectedSeason(active.id.toString());
       }
-      if (cc) setCostCenters(cc);
+      if (ccRes.data) setCostCenters(ccRes.data);
+
+      // Fetch ALL movements using a loop to bypass the 1000 limit
+      let allMovs: any[] = [];
+      let from = 0;
+      let to = 999;
+      let hasMore = true;
+
+      while (hasMore) {
+        const { data, error } = await supabase
+          .from('movimientos')
+          .select('*, cuentas_bancarias(moneda, empresas(id, codigo)), centros_costo(nombre), temporadas(nombre)')
+          .order('fecha', { ascending: false })
+          .order('id', { ascending: true })
+          .range(from, to);
+
+        if (error || !data || data.length === 0) {
+          hasMore = false;
+        } else {
+          allMovs = [...allMovs, ...data];
+          if (data.length < 1000) {
+            hasMore = false;
+          } else {
+            from += 1000;
+            to += 1000;
+          }
+        }
+      }
+
+      setMovements(allMovs);
       setLoading(false);
     }
     fetchData();
@@ -55,14 +133,23 @@ export default function AnalisisPage() {
 
   const filteredData = useMemo(() => {
     let data = movements;
+    
+    // Filter strictly by the selected currency
+    data = data.filter(m => m.cuentas_bancarias?.moneda === selectedCurrency);
+    
     if (selectedCompany !== "all") data = data.filter(m => m.cuentas_bancarias?.empresas?.codigo === selectedCompany);
     if (selectedSeason !== "all") data = data.filter(m => m.temporada_id?.toString() === selectedSeason);
+    if (selectedCC !== "all") data = data.filter(m => m.centro_costo_id?.toString() === selectedCC);
+    
     const now = new Date();
-    if (timeRange === "week") data = data.filter(m => isWithinInterval(parseISO(m.fecha), { start: startOfWeek(now), end: endOfWeek(now) }));
-    else if (timeRange === "month") data = data.filter(m => isWithinInterval(parseISO(m.fecha), { start: startOfMonth(now), end: endOfMonth(now) }));
-    else if (timeRange === "year") data = data.filter(m => parseISO(m.fecha).getFullYear() === now.getFullYear());
+    // Parse date-only string in local time to prevent timezone shift anomalies
+    const parseLocalDate = (dateStr: string) => new Date(dateStr + 'T00:00:00');
+    
+    if (timeRange === "week") data = data.filter(m => isWithinInterval(parseLocalDate(m.fecha), { start: startOfWeek(now), end: endOfWeek(now) }));
+    else if (timeRange === "month") data = data.filter(m => isWithinInterval(parseLocalDate(m.fecha), { start: startOfMonth(now), end: endOfMonth(now) }));
+    else if (timeRange === "year") data = data.filter(m => parseLocalDate(m.fecha).getFullYear() === now.getFullYear());
     return data;
-  }, [movements, selectedCompany, selectedSeason, timeRange]);
+  }, [movements, selectedCompany, selectedSeason, selectedCC, timeRange, selectedCurrency]);
 
   const stats = useMemo(() => {
     const totalIncome = filteredData.filter(m => m.tipo === 'Ingreso').reduce((s, m) => s + parseFloat(m.monto), 0);
@@ -96,15 +183,22 @@ export default function AnalisisPage() {
     return { totalIncome, totalExpense, pieCC, pieEmpresa, barProviders, trendData, count: filteredData.length };
   }, [filteredData]);
 
+  const paginatedMovements = useMemo(() => {
+    const start = (currentPage - 1) * ITEMS_PER_PAGE;
+    return filteredData.slice(start, start + ITEMS_PER_PAGE);
+  }, [filteredData, currentPage]);
+
+  const totalPages = Math.ceil(filteredData.length / ITEMS_PER_PAGE);
+
   // Temporada comparison table
   const seasonComparison = useMemo(() => {
     return seasons.map(s => {
-      const movs = movements.filter(m => m.temporada_id?.toString() === s.id.toString());
+      const movs = movements.filter(m => m.temporada_id?.toString() === s.id.toString() && m.cuentas_bancarias?.moneda === selectedCurrency);
       const income = movs.filter(m => m.tipo === 'Ingreso').reduce((a, m) => a + parseFloat(m.monto), 0);
       const expense = movs.filter(m => m.tipo === 'Egreso').reduce((a, m) => a + parseFloat(m.monto), 0);
       return { ...s, income, expense, net: income - expense, count: movs.length };
     });
-  }, [seasons, movements]);
+  }, [seasons, movements, selectedCurrency]);
 
   const activeSeason = seasons.find(s => s.fecha_inicio && !s.fecha_fin);
 
@@ -141,6 +235,22 @@ export default function AnalisisPage() {
               })}
             </select>
           </div>
+          <div className="flex items-center gap-2 px-4 border-r border-zinc-200 dark:border-zinc-800">
+            <Tag className="w-4 h-4 text-amber-500" />
+            <select value={selectedCC} onChange={e => setSelectedCC(e.target.value)} className="bg-transparent text-xs font-black uppercase text-zinc-600 dark:text-zinc-400 border-none focus:ring-0">
+              <option value="all">Todos los Centros</option>
+              {costCenters.filter(cc => !ARCHIVED_COST_CENTERS.has(cc.nombre.toUpperCase().trim()) || manuallyActivatedCCNames.has(cc.nombre.toUpperCase().trim()) || cc.id.toString() === selectedCC).map(cc => (
+                <option key={cc.id} value={cc.id}>{cc.nombre}</option>
+              ))}
+            </select>
+          </div>
+          <div className="flex items-center gap-2 px-4 border-r border-zinc-200 dark:border-zinc-800">
+            <Filter className="w-4 h-4 text-zinc-400" />
+            <select value={selectedCurrency} onChange={e => setSelectedCurrency(e.target.value as "MXN" | "USD")} className="bg-transparent text-xs font-black uppercase text-zinc-600 dark:text-zinc-400 border-none focus:ring-0">
+              <option value="MXN">Moneda: MXN</option>
+              <option value="USD">Moneda: USD</option>
+            </select>
+          </div>
           <div className="flex p-1 bg-white/50 dark:bg-black/20 rounded-xl">
             {(['week','month','year','all'] as const).map(r => (
               <button key={r} onClick={() => setTimeRange(r)} className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${timeRange === r ? "bg-primary text-white shadow-lg" : "text-zinc-500 hover:text-zinc-300"}`}>
@@ -162,9 +272,9 @@ export default function AnalisisPage() {
 
       {/* 4 Metric Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <MetricCard title="Ingresos Totales" value={stats.totalIncome} icon={<ArrowUpRight className="text-emerald-500" />} color="emerald" />
-        <MetricCard title="Egresos Totales" value={stats.totalExpense} icon={<ArrowDownRight className="text-rose-500" />} color="rose" />
-        <MetricCard title="Cash Flow Neto" value={stats.totalIncome - stats.totalExpense} icon={<TrendingUp className="text-primary" />} color="primary" />
+        <MetricCard title="Ingresos Totales" value={stats.totalIncome} icon={<ArrowUpRight className="text-emerald-500" />} color="emerald" currency={selectedCurrency} />
+        <MetricCard title="Egresos Totales" value={stats.totalExpense} icon={<ArrowDownRight className="text-rose-500" />} color="rose" currency={selectedCurrency} />
+        <MetricCard title="Cash Flow Neto" value={stats.totalIncome - stats.totalExpense} icon={<TrendingUp className="text-primary" />} color="primary" currency={selectedCurrency} />
         <div className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 p-8 rounded-[2.5rem] relative overflow-hidden group">
           <div className="flex items-center justify-between mb-4">
             <p className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-300 dark:text-zinc-400">Movimientos</p>
@@ -350,11 +460,117 @@ export default function AnalisisPage() {
           </div>
         </div>
       )}
+
+      {/* Consultas y Detalle de Movimientos */}
+      <div className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-[2.5rem] p-8 shadow-sm space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-xl font-black text-zinc-900 dark:text-zinc-50 uppercase tracking-tighter">Consulta de Movimientos</h3>
+            <p className="text-xs text-zinc-500 font-bold uppercase mt-1">
+              {selectedCC !== "all" 
+                ? `Mostrando movimientos del Centro de Costo: ${costCenters.find(cc => cc.id.toString() === selectedCC)?.nombre}`
+                : "Listado general de movimientos filtrados"
+              }
+            </p>
+          </div>
+          <span className="px-3 py-1 rounded-full bg-zinc-100 dark:bg-zinc-800 text-[10px] font-black uppercase text-zinc-500 tracking-wider">
+            {filteredData.length} Registros
+          </span>
+        </div>
+
+        <div className="overflow-x-auto rounded-2xl border border-zinc-100 dark:border-zinc-800">
+          <table className="w-full text-left">
+            <thead>
+              <tr className="bg-zinc-50/50 dark:bg-zinc-900/50 border-b border-zinc-100 dark:border-zinc-800">
+                <th className="px-5 py-4 text-[9px] font-black uppercase tracking-widest text-zinc-400">Fecha</th>
+                <th className="px-5 py-4 text-[9px] font-black uppercase tracking-widest text-zinc-400">Empresa</th>
+                <th className="px-5 py-4 text-[9px] font-black uppercase tracking-widest text-zinc-400">Banco/Cuenta</th>
+                <th className="px-5 py-4 text-[9px] font-black uppercase tracking-widest text-zinc-400">Tercero</th>
+                <th className="px-5 py-4 text-[9px] font-black uppercase tracking-widest text-zinc-400">Concepto</th>
+                <th className="px-5 py-4 text-[9px] font-black uppercase tracking-widest text-zinc-400">C. Costo</th>
+                <th className="px-5 py-4 text-[9px] font-black uppercase tracking-widest text-zinc-400 text-right">Monto</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-zinc-50 dark:divide-zinc-900 text-xs">
+              {paginatedMovements.map((move: any) => {
+                const isEgreso = move.tipo === 'Egreso';
+                const isTraspaso = move.tipo === 'Traspaso';
+                const amt = parseFloat(move.monto);
+                const isTraspasoOut = isTraspaso && amt < 0;
+                return (
+                  <tr key={move.id} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-900/50 transition-colors">
+                    <td className="px-5 py-4 font-bold text-zinc-500 dark:text-zinc-300 whitespace-nowrap">
+                      {move.fecha.split('-').reverse().join('/')}
+                    </td>
+                    <td className="px-5 py-4 font-black uppercase text-zinc-900 dark:text-zinc-50">
+                      {move.cuentas_bancarias?.empresas?.codigo || 'N/A'}
+                    </td>
+                    <td className="px-5 py-4 text-zinc-500 dark:text-zinc-400">
+                      {move.cuentas_bancarias?.banco} ({move.cuentas_bancarias?.moneda})
+                    </td>
+                    <td className="px-5 py-4 font-bold text-zinc-900 dark:text-zinc-200">
+                      {move.nombre_tercero || '—'}
+                    </td>
+                    <td className="px-5 py-4 text-zinc-500 dark:text-zinc-400 truncate max-w-[220px]" title={move.concepto}>
+                      {move.concepto || '—'}
+                    </td>
+                    <td className="px-5 py-4">
+                      <span className="px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-600 dark:text-amber-400 text-[10px] font-bold">
+                        {move.centros_costo?.nombre || 'Gral'}
+                      </span>
+                    </td>
+                    <td className={`px-5 py-4 text-right font-black text-sm ${isEgreso ? 'text-rose-500' : isTraspaso ? 'text-blue-500' : 'text-emerald-500'}`}>
+                      {isEgreso || isTraspasoOut ? '-' : '+'}${Math.abs(amt).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                    </td>
+                  </tr>
+                );
+              })}
+              {paginatedMovements.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="text-center py-10 text-zinc-400 italic">
+                    No se encontraron movimientos con los filtros aplicados.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Pagination Footer */}
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between pt-4 border-t border-zinc-100 dark:border-zinc-800">
+            <p className="text-[10px] font-black uppercase text-zinc-400 tracking-widest">
+              Mostrando {((currentPage - 1) * ITEMS_PER_PAGE) + 1} - {Math.min(currentPage * ITEMS_PER_PAGE, filteredData.length)} de {filteredData.length}
+            </p>
+            <div className="flex items-center gap-2">
+              <button 
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                className="p-2 rounded-xl bg-white border border-zinc-200 text-zinc-600 disabled:opacity-30 dark:bg-zinc-900 dark:border-zinc-800 dark:text-zinc-400 transition-all hover:border-primary/50"
+              >
+                &larr;
+              </button>
+              <div className="flex items-center gap-1 font-black text-[11px] text-zinc-900 dark:text-zinc-50 px-3">
+                <span>{currentPage}</span>
+                <span className="text-zinc-300">/</span>
+                <span className="text-zinc-400 dark:text-zinc-300">{totalPages}</span>
+              </div>
+              <button 
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+                className="p-2 rounded-xl bg-white border border-zinc-200 text-zinc-600 disabled:opacity-30 dark:bg-zinc-900 dark:border-zinc-800 dark:text-zinc-400 transition-all hover:border-primary/50"
+              >
+                &rarr;
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
 
-function MetricCard({ title, value, icon, color }: { title: string, value: number, icon: any, color: string }) {
+function MetricCard({ title, value, icon, color, currency }: { title: string, value: number, icon: any, color: string, currency: string }) {
   const isNegative = value < 0;
   return (
     <div className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 p-8 rounded-[2.5rem] relative overflow-hidden group">
@@ -367,7 +583,7 @@ function MetricCard({ title, value, icon, color }: { title: string, value: numbe
         <h2 className={`text-3xl font-black tracking-tighter ${isNegative ? "text-rose-500" : "text-zinc-900 dark:text-zinc-50"}`}>
           ${Math.abs(value).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
         </h2>
-        <span className="text-xs font-black text-zinc-400 uppercase tracking-widest">MXN</span>
+        <span className="text-xs font-black text-zinc-400 uppercase tracking-widest">{currency}</span>
       </div>
     </div>
   );

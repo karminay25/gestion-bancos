@@ -39,6 +39,37 @@ const getMonthName = (monthStr: string) => {
     return date.toLocaleString('es-ES', { month: 'short' }).toUpperCase() + ' ' + year.slice(2);
 };
 
+// Cost centers from the Excel that should be hidden from dropdown menus for new selection/filtering
+const ARCHIVED_COST_CENTERS = new Set([
+  'ACTIVO LOLA',
+  'AGRICOLA OBA',
+  'AOO',
+  'BOSBEA',
+  'BOSBSES',
+  'CFRV',
+  'CRFV',
+  'JFV',
+  'LACM',
+  'LOA',
+  'LOLA',
+  'LOLA/BOSBES',
+  'LOLA/BOSBES/OBA',
+  'LOLA/OBA',
+  'OBA/BOSBES',
+  'OBA/LOLA',
+  'PRO',
+  'PROCESO',
+  'SOCIIO JFV',
+  'SOCIO',
+  'SOCIO CARLOS',
+  'SOCIO JOSE',
+  'SOCIO LUIS',
+  'SOCIOS CARLOS',
+  'NOMINA',
+  'TRASPASOS',
+  'GASOLINA'
+]);
+
 // Sub-component for each account's ledger to manage local filters and pagination
 function AccountLedger({ account, movements, costCenters, terceros, onRefresh }: { account: any, movements: any[], costCenters: any[], terceros: any[], onRefresh: () => void }) {
     const [searchTerm, setSearchTerm] = useState("");
@@ -48,15 +79,136 @@ function AccountLedger({ account, movements, costCenters, terceros, onRefresh }:
     const [currentPage, setCurrentPage] = useState(1);
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
     const [isUpdating, setIsUpdating] = useState<string | null>(null); // For loading state per row
+    const [showAddCC, setShowAddCC] = useState(false);
+    const [newCCName, setNewCCName] = useState("");
+    const [savingCC, setSavingCC] = useState(false);
+    const [manuallyActivatedCCNames, setManuallyActivatedCCNames] = useState<Set<string>>(new Set());
     const ITEMS_PER_PAGE = 20;
+
+    useEffect(() => {
+        try {
+            const stored = localStorage.getItem('manually_activated_ccs');
+            if (stored) {
+                setManuallyActivatedCCNames(new Set(JSON.parse(stored)));
+            }
+        } catch (e) {
+            console.error('Error loading activated CCs:', e);
+        }
+    }, []);
+
+    const activateCCName = (name: string) => {
+        setManuallyActivatedCCNames(prev => {
+            const next = new Set(prev);
+            next.add(name);
+            try {
+                localStorage.setItem('manually_activated_ccs', JSON.stringify(Array.from(next)));
+            } catch (e) {
+                console.error('Error saving activated CCs:', e);
+            }
+            return next;
+        });
+    };
+
+    const handleAddCC = async () => {
+        const name = newCCName.trim().toUpperCase();
+        if (!name) return;
+        setSavingCC(true);
+
+        // Check if it already exists in the costCenters list from database
+        const existing = costCenters.find(cc => cc.nombre.trim().toUpperCase() === name);
+        if (existing) {
+            const isArchived = ARCHIVED_COST_CENTERS.has(name) && !manuallyActivatedCCNames.has(name);
+            if (isArchived) {
+                // Un-archive it dynamically
+                activateCCName(name);
+                setNewCCName('');
+                setShowAddCC(false);
+                onRefresh();
+            } else {
+                alert(`El centro de costo "${newCCName.trim()}" ya existe y está activo.`);
+            }
+            setSavingCC(false);
+            return;
+        }
+
+        const { error } = await supabase.from('centros_costo').insert({ nombre: newCCName.trim() });
+        if (error) {
+            alert('Error al guardar: ' + error.message);
+        } else {
+            setNewCCName('');
+            setShowAddCC(false);
+            onRefresh();
+        }
+        setSavingCC(false);
+    };
 
     // 1. Calculate running balances from ALL movements for this account (ignoring filters for balance integrity)
     const movementsWithBalance = useMemo(() => {
-        return sortMovements(movements)
-            .map(m => {
-                const monthKey = m.fecha.slice(0, 7); // YYYY-MM
-                return { ...m, monthKey };
-            });
+        const sorted = sortMovements(movements);
+
+        // --- Pass 1: find the first explicit balance anchor ---
+        let anchorIdx = -1;
+        let anchorBalance = 0;
+        for (let i = 0; i < sorted.length; i++) {
+            const m = sorted[i];
+            let val = m.saldoo;
+            if (val === null || val === undefined || val === '') {
+                val = m.saldo_excel;
+                if (!val && m.factura?.includes('[BANCO:')) {
+                    const match = m.factura.match(/\[BANCO:\s*([0-9,.-]+)\]/);
+                    if (match) val = match[1].replace(/,/g, '');
+                }
+            }
+            if (val !== null && val !== undefined && val !== '') {
+                const parsed = typeof val === 'string' ? parseFloat(val.replace(/,/g, '')) : parseFloat(String(val));
+                if (!isNaN(parsed)) {
+                    anchorIdx = i;
+                    anchorBalance = parsed;
+                    break;
+                }
+            }
+        }
+
+        // --- Pass 2: propagate balance to every row ---
+        const balances: number[] = new Array(sorted.length).fill(NaN);
+
+        if (anchorIdx !== -1) {
+            balances[anchorIdx] = anchorBalance;
+            // Forward from anchor
+            for (let i = anchorIdx + 1; i < sorted.length; i++) {
+                const m = sorted[i];
+                // If this row has its own explicit balance, use it as new anchor
+                let val = m.saldoo;
+                if (val === null || val === undefined || val === '') {
+                    val = m.saldo_excel;
+                    if (!val && m.factura?.includes('[BANCO:')) {
+                        const match = m.factura.match(/\[BANCO:\s*([0-9,.-]+)\]/);
+                        if (match) val = match[1].replace(/,/g, '');
+                    }
+                }
+                if (val !== null && val !== undefined && val !== '') {
+                    const parsed = typeof val === 'string' ? parseFloat(val.replace(/,/g, '')) : parseFloat(String(val));
+                    if (!isNaN(parsed)) { balances[i] = parsed; continue; }
+                }
+                let amt = parseFloat(String(sorted[i].monto || '0').replace(/,/g, ''));
+                if (sorted[i].tipo === 'Egreso') amt = -Math.abs(amt);
+                // Si es Ingreso, amt queda positivo.
+                // Si es Traspaso, amt ya trae su signo correcto (+ o -).
+                balances[i] = balances[i - 1] + amt;
+            }
+            // Backward from anchor
+            for (let i = anchorIdx - 1; i >= 0; i--) {
+                let amt = parseFloat(String(sorted[i + 1].monto || '0').replace(/,/g, ''));
+                if (sorted[i + 1].tipo === 'Egreso') amt = -Math.abs(amt);
+                balances[i] = balances[i + 1] - amt;
+            }
+        }
+
+        return sorted.map((m, i) => ({
+            ...m,
+            monthKey: m.fecha.slice(0, 7),
+            saldo_calculado: isNaN(balances[i]) ? null : balances[i],
+        }));
     }, [movements]);
 
     // 2. Identify available months and default to current if possible
@@ -296,16 +448,26 @@ function AccountLedger({ account, movements, costCenters, terceros, onRefresh }:
                         onChange={(e) => setSearchTerm(e.target.value)}
                     />
                 </div>
-                <div className="relative col-span-1">
-                    <Tag className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-400" />
-                    <select 
-                        className="w-full pl-9 pr-4 py-2.5 text-xs rounded-xl border-none bg-white dark:bg-zinc-900 appearance-none focus:ring-2 focus:ring-primary/20 text-zinc-900 dark:text-zinc-50 font-bold"
-                        value={selectedCC}
-                        onChange={(e) => setSelectedCC(e.target.value)}
+                {/* CC filter + add button */}
+                <div className="relative col-span-1 flex gap-1.5">
+                    <div className="relative flex-1">
+                        <Tag className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-400" />
+                        <select 
+                            className="w-full pl-9 pr-4 py-2.5 text-xs rounded-xl border-none bg-white dark:bg-zinc-900 appearance-none focus:ring-2 focus:ring-primary/20 text-zinc-900 dark:text-zinc-50 font-bold"
+                            value={selectedCC}
+                            onChange={(e) => setSelectedCC(e.target.value)}
+                        >
+                            <option value="" className="dark:bg-zinc-900">Todos los Centros</option>
+                            {costCenters.filter(cc => !ARCHIVED_COST_CENTERS.has(cc.nombre.toUpperCase().trim()) || manuallyActivatedCCNames.has(cc.nombre.toUpperCase().trim())).map(cc => <option key={cc.id} value={cc.id} className="dark:bg-zinc-900">{cc.nombre}</option>)}
+                        </select>
+                    </div>
+                    <button
+                        onClick={() => setShowAddCC(v => !v)}
+                        title="Agregar nuevo centro de costo"
+                        className="flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 text-zinc-400 hover:text-primary hover:border-primary/50 transition-all"
                     >
-                        <option value="" className="dark:bg-zinc-900">Todos los Centros</option>
-                        {costCenters.map(cc => <option key={cc.id} value={cc.id} className="dark:bg-zinc-900">{cc.nombre}</option>)}
-                    </select>
+                        <Plus className="w-4 h-4" />
+                    </button>
                 </div>
                 <div className="relative col-span-1">
                     <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-400" />
@@ -327,6 +489,44 @@ function AccountLedger({ account, movements, costCenters, terceros, onRefresh }:
                     Limpieza Inteligente
                 </button>
             </div>
+
+            {/* Inline modal: add new cost center */}
+            <AnimatePresence>
+                {showAddCC && (
+                    <motion.div
+                        initial={{ opacity: 0, y: -8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -8 }}
+                        className="flex items-center gap-3 bg-white dark:bg-zinc-900 border border-primary/20 rounded-[1.5rem] px-5 py-3.5 shadow-lg shadow-primary/5"
+                    >
+                        <Tag className="w-4 h-4 text-primary flex-shrink-0" />
+                        <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400 whitespace-nowrap">Nuevo Centro:</p>
+                        <input
+                            autoFocus
+                            type="text"
+                            placeholder="Ej. FRAMBUESA NORTE"
+                            value={newCCName}
+                            onChange={(e) => setNewCCName(e.target.value)}
+                            onKeyDown={(e) => { if (e.key === 'Enter') handleAddCC(); if (e.key === 'Escape') setShowAddCC(false); }}
+                            className="flex-1 bg-zinc-50 dark:bg-zinc-800 rounded-xl px-3 py-2 text-xs font-bold uppercase text-zinc-900 dark:text-zinc-50 border-none focus:ring-2 focus:ring-primary/30 outline-none transition-all"
+                        />
+                        <button
+                            onClick={handleAddCC}
+                            disabled={savingCC || !newCCName.trim()}
+                            className="px-4 py-2 bg-primary text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:opacity-90 disabled:opacity-40 transition-all flex items-center gap-1.5"
+                        >
+                            {savingCC ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
+                            Guardar
+                        </button>
+                        <button
+                            onClick={() => { setShowAddCC(false); setNewCCName(''); }}
+                            className="text-[10px] font-black uppercase text-zinc-300 hover:text-rose-500 transition-colors px-2"
+                        >
+                            Cancelar
+                        </button>
+                    </motion.div>
+                )}
+            </AnimatePresence>
 
             {/* Bulk Actions Bar */}
             <AnimatePresence>
@@ -350,7 +550,7 @@ function AccountLedger({ account, movements, costCenters, terceros, onRefresh }:
                             >
                                 <option value="" className="dark:bg-zinc-900">Seleccionar Centro...</option>
                                 <option value="null" className="dark:bg-zinc-900">-- Quitar Centro --</option>
-                                {costCenters.map(cc => <option key={cc.id} value={cc.id} className="dark:bg-zinc-900">{cc.nombre}</option>)}
+                                {costCenters.filter(cc => !ARCHIVED_COST_CENTERS.has(cc.nombre.toUpperCase().trim()) || manuallyActivatedCCNames.has(cc.nombre.toUpperCase().trim())).map(cc => <option key={cc.id} value={cc.id} className="dark:bg-zinc-900">{cc.nombre}</option>)}
                             </select>
                             <button onClick={() => setSelectedIds([])} className="text-[10px] font-black uppercase text-zinc-400 hover:text-rose-500 transition-colors px-4">Cancelar</button>
                         </div>
@@ -471,22 +671,53 @@ function AccountLedger({ account, movements, costCenters, terceros, onRefresh }:
                                 <td className="px-5 py-5 text-center">
                                     {move.tipo === 'Ingreso' ? (
                                         <span className="text-xs font-black text-emerald-600">${parseFloat(move.monto).toLocaleString()}</span>
+                                    ) : move.tipo === 'Traspaso' && parseFloat(move.monto) >= 0 ? (
+                                        <span className="text-xs font-black text-blue-600">${parseFloat(move.monto).toLocaleString()}</span>
                                     ) : '-'}
                                 </td>
                                 <td className="px-5 py-5 text-center">
                                     {move.tipo === 'Egreso' ? (
                                         <span className="text-xs font-black text-rose-600 dark:text-rose-500">${parseFloat(move.monto).toLocaleString()}</span>
+                                    ) : move.tipo === 'Traspaso' && parseFloat(move.monto) < 0 ? (
+                                        <span className="text-xs font-black text-blue-600">${Math.abs(parseFloat(move.monto)).toLocaleString()}</span>
                                     ) : '-'}
                                 </td>
                                 <td className="px-5 py-5 text-right bg-primary/[0.01]">
                                     {(() => {
-                                        let displaySaldo = move.saldo_excel;
-                                        if (!displaySaldo && move.factura?.includes('[BANCO:')) {
-                                            const match = move.factura.match(/\[BANCO:\s*([0-9,.-]+)\]/);
-                                            if (match) displaySaldo = match[1].replace(/,/g, '');
+                                        // Prefer database saldoo, then explicit Excel balance, then fall back to dynamically calculated balance
+                                        let displaySaldo: number | null = null;
+                                        let isCalculated = false;
+
+                                        if (move.saldoo !== null && move.saldoo !== undefined && move.saldoo !== '') {
+                                            displaySaldo = typeof move.saldoo === 'string' ? parseFloat(move.saldoo) : move.saldoo;
                                         }
-                                        return displaySaldo ? (
-                                            <span className="text-sm font-black text-zinc-900 dark:text-zinc-50">${parseFloat(displaySaldo).toLocaleString()}</span>
+
+                                        if (displaySaldo === null) {
+                                            let val = move.saldo_excel;
+                                            if (!val && move.factura?.includes('[BANCO:')) {
+                                                const match = move.factura.match(/\[BANCO:\s*([0-9,.-]+)\]/);
+                                                if (match) val = match[1].replace(/,/g, '');
+                                            }
+                                            if (val !== null && val !== undefined && val !== '') {
+                                                const parsed = parseFloat(String(val).replace(/,/g, ''));
+                                                if (!isNaN(parsed)) displaySaldo = parsed;
+                                            }
+                                        }
+
+                                        if (displaySaldo === null && move.saldo_calculado !== null && move.saldo_calculado !== undefined) {
+                                            displaySaldo = move.saldo_calculado;
+                                            isCalculated = true;
+                                        }
+
+                                        return displaySaldo !== null ? (
+                                            <div className="flex flex-col items-end gap-0.5">
+                                                <span className="text-sm font-black text-zinc-900 dark:text-zinc-50">
+                                                    ${displaySaldo.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                </span>
+                                                {isCalculated && (
+                                                    <span className="text-[8px] text-zinc-300 uppercase tracking-widest font-bold">calc.</span>
+                                                )}
+                                            </div>
                                         ) : (
                                             <span className="text-[10px] text-zinc-300 italic">No disp.</span>
                                         );
@@ -560,7 +791,7 @@ function AccountLedger({ account, movements, costCenters, terceros, onRefresh }:
                                                     className={`text-[9px] font-black uppercase px-2 py-1 rounded-xl border-none focus:ring-2 focus:ring-primary/20 appearance-none cursor-pointer transition-all ${hasSuggestion ? "bg-primary/10 text-primary border border-primary/20 animate-pulse" : "bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-50 hover:bg-zinc-200 dark:hover:bg-zinc-700"} ${isUpdating === move.id ? "opacity-50" : ""}`}
                                                 >
                                                     <option value="" className="dark:bg-zinc-900">{hasSuggestion ? `SUG: ${suggestedCC?.nombre}` : "Gral"}</option>
-                                                    {costCenters.map(cc => <option key={cc.id} value={cc.id} className="dark:bg-zinc-900">{cc.nombre}</option>)}
+                                                    {costCenters.filter(cc => !ARCHIVED_COST_CENTERS.has(cc.nombre.toUpperCase().trim()) || manuallyActivatedCCNames.has(cc.nombre.toUpperCase().trim()) || cc.id === move.centro_costo_id).map(cc => <option key={cc.id} value={cc.id} className="dark:bg-zinc-900">{cc.nombre}</option>)}
                                                 </select>
                                                 {hasSuggestion && (
                                                     <div className="absolute -top-3 left-1 flex items-center gap-1 opacity-0 group-hover/cc:opacity-100 transition-opacity">

@@ -7,7 +7,7 @@ export async function POST(req: NextRequest) {
         // 1. Sync from email
         const syncResult = await syncInvoicesFromEmail();
         
-        // 2. Run matching engine
+        // 2. Run matching engine on ALL pending/suggested invoices (not just new ones)
         const matchResult = await matchInvoicesWithMovements();
 
         return NextResponse.json({ 

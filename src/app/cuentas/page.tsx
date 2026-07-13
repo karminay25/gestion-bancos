@@ -13,11 +13,14 @@ import {
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { calculateAccountBalance, sortMovements } from "@/lib/balances";
+import NewAccountModal from "@/components/NewAccountModal";
 
 export default function CuentasPage() {
   const [data, setData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedCompanies, setExpandedCompanies] = useState<string[]>([]);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [empresas, setEmpresas] = useState<any[]>([]);
 
   async function fetchAccounts() {
     setLoading(true);
@@ -78,6 +81,7 @@ export default function CuentasPage() {
       }));
 
       setData(grouped);
+      setEmpresas(compRes.data);
       // Expand all by default for visibility
       setExpandedCompanies(compRes.data.map(c => c.id));
     }
@@ -110,7 +114,10 @@ export default function CuentasPage() {
           <h1 className="text-4xl font-black tracking-tight text-zinc-900 dark:text-zinc-50">Cuentas Bancarias</h1>
           <p className="text-zinc-500 mt-1 dark:text-zinc-200 font-medium">Gestión de activos líquidos por entidad legal.</p>
         </div>
-        <button className="flex items-center gap-2 rounded-2xl bg-primary px-6 py-3 text-sm font-bold text-zinc-50 shadow-xl shadow-primary/20 hover:scale-[1.02] transition-all active:scale-95">
+        <button 
+          onClick={() => setIsModalOpen(true)}
+          className="flex items-center gap-2 rounded-2xl bg-primary px-6 py-3 text-sm font-bold text-zinc-50 shadow-xl shadow-primary/20 hover:scale-[1.02] transition-all active:scale-95"
+        >
           <Plus className="w-5 h-5" />
           Nueva Cuenta
         </button>
@@ -191,6 +198,16 @@ export default function CuentasPage() {
           </div>
         ))}
       </div>
+
+      <NewAccountModal 
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        empresas={empresas}
+        onSaved={() => {
+          setIsModalOpen(false);
+          fetchAccounts();
+        }}
+      />
     </div>
   );
 }

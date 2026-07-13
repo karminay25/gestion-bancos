@@ -17,10 +17,41 @@ import {
   TrendingUp,
   Building2,
   Leaf,
-  Tag
+  Tag,
+  Plus
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "@/lib/supabase";
+
+const ARCHIVED_COST_CENTERS = new Set([
+  'ACTIVO LOLA',
+  'AGRICOLA OBA',
+  'AOO',
+  'BOSBEA',
+  'BOSBSES',
+  'CFRV',
+  'CRFV',
+  'JFV',
+  'LACM',
+  'LOA',
+  'LOLA',
+  'LOLA/BOSBES',
+  'LOLA/BOSBES/OBA',
+  'LOLA/OBA',
+  'OBA/BOSBES',
+  'OBA/LOLA',
+  'PRO',
+  'PROCESO',
+  'SOCIIO JFV',
+  'SOCIO',
+  'SOCIO CARLOS',
+  'SOCIO JOSE',
+  'SOCIO LUIS',
+  'SOCIOS CARLOS',
+  'NOMINA',
+  'TRASPASOS',
+  'GASOLINA'
+]);
 
 interface NewMovementFormProps {
   onClose: () => void;
@@ -54,16 +85,54 @@ export function NewMovementForm({ onClose, onSuccess, initialTab = "manual" }: N
     temporada_id: "",
     fecha: new Date().toISOString().split('T')[0],
     tipo: "Egreso",
+    traspasoType: "out",
     monto: "",
     nombre_tercero: "",
     concepto: "",
     factura: "",
     centro_costo_id: "",
+    destinationAccountId: "",
   });
 
   // Global selections shared by both tabs
   const [globalSeasonId, setGlobalSeasonId] = useState("");
   const [globalCCId, setGlobalCCId] = useState("");
+  const [showAddCC, setShowAddCC] = useState(false);
+  const [newCCName, setNewCCName] = useState("");
+  const [savingCC, setSavingCC] = useState(false);
+
+  const handleAddCC = async () => {
+    const name = newCCName.trim().toUpperCase();
+    if (!name) return;
+    setSavingCC(true);
+
+    const existing = costCenters.find(cc => cc.nombre.trim().toUpperCase() === name);
+    if (existing) {
+      alert(`El centro de costo "${newCCName.trim()}" ya existe.`);
+      setGlobalCCId(existing.id);
+      setNewCCName('');
+      setShowAddCC(false);
+      setSavingCC(false);
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase.from('centros_costo').insert({ nombre: newCCName.trim() }).select();
+      if (error) {
+        alert('Error al guardar: ' + error.message);
+      } else if (data && data.length > 0) {
+        const newCC = data[0];
+        setCostCenters(prev => [...prev, newCC].sort((a, b) => a.nombre.localeCompare(b.nombre)));
+        setGlobalCCId(newCC.id);
+        setNewCCName('');
+        setShowAddCC(false);
+      }
+    } catch (e: any) {
+      alert('Error: ' + e.message);
+    } finally {
+      setSavingCC(false);
+    }
+  };
 
   // Import state
   const [file, setFile] = useState<File | null>(null);
@@ -176,20 +245,43 @@ export function NewMovementForm({ onClose, onSuccess, initialTab = "manual" }: N
     setLoading(true);
     setError(null);
 
+    let finalMonto = parseFloat(formData.monto);
+    if (formData.tipo === 'Traspaso' && formData.traspasoType === 'out') {
+        finalMonto = -Math.abs(finalMonto);
+    } else if (formData.tipo === 'Traspaso' && formData.traspasoType === 'in') {
+        finalMonto = Math.abs(finalMonto);
+    }
+
     try {
-      const { error: insError } = await supabase
-        .from('movimientos')
-        .insert([{
+      const recordsToInsert = [{
           cuenta_id: currentAccount.id,
           temporada_id: globalSeasonId || null,
           fecha: formData.fecha,
           tipo: formData.tipo,
-          monto: parseFloat(formData.monto),
-          nombre_tercero: formData.nombre_tercero,
-          concepto: formData.concepto,
-          factura: formData.factura,
+          monto: finalMonto,
+          nombre_tercero: (formData.nombre_tercero || "").trim() || null,
+          concepto: (formData.concepto || "").trim() || null,
+          factura: (formData.factura || "").trim() || null,
           centro_costo_id: globalCCId || null,
-        }]);
+      }];
+
+      if (formData.tipo === 'Traspaso' && formData.destinationAccountId) {
+          recordsToInsert.push({
+              cuenta_id: formData.destinationAccountId,
+              temporada_id: globalSeasonId || null,
+              fecha: formData.fecha,
+              tipo: formData.tipo,
+              monto: -finalMonto, // Opposite sign for the destination account
+              nombre_tercero: (formData.nombre_tercero || "").trim() || null,
+              concepto: (formData.concepto || "").trim() || null,
+              factura: (formData.factura || "").trim() || null,
+              centro_costo_id: globalCCId || null,
+          });
+      }
+
+      const { error: insError } = await supabase
+        .from('movimientos')
+        .insert(recordsToInsert);
 
       if (insError) throw insError;
       onSuccess();
@@ -358,12 +450,65 @@ export function NewMovementForm({ onClose, onSuccess, initialTab = "manual" }: N
                         </select>
                     </FormField>
                     <FormField label="Centro de Costo">
-                        <select value={globalCCId} onChange={e => setGlobalCCId(e.target.value)} className="select-custom-dark" style={{ color: 'white' }}>
-                            <option value="" style={{ color: 'white' }}>Gral / Sin Clasificar</option>
-                            {costCenters.map(cc => <option key={cc.id} value={cc.id} style={{ color: 'white' }}>{cc.nombre}</option>)}
-                        </select>
+                        <div className="flex gap-2">
+                            <select value={globalCCId} onChange={e => setGlobalCCId(e.target.value)} className="select-custom-dark flex-1" style={{ color: 'white' }}>
+                                <option value="" style={{ color: 'white' }}>Gral / Sin Clasificar</option>
+                                {costCenters.filter(cc => !ARCHIVED_COST_CENTERS.has(cc.nombre.toUpperCase().trim())).map(cc => <option key={cc.id} value={cc.id} style={{ color: 'white' }}>{cc.nombre}</option>)}
+                            </select>
+                            <button
+                                type="button"
+                                onClick={() => setShowAddCC(v => !v)}
+                                className="flex-shrink-0 w-[50px] h-[50px] flex items-center justify-center rounded-2xl bg-white/5 border border-white/10 text-zinc-400 hover:text-primary hover:border-primary/50 transition-all"
+                                title="Agregar nuevo centro de costo"
+                            >
+                                <Plus className="w-5 h-5" />
+                            </button>
+                        </div>
                     </FormField>
                 </div>
+                
+                <AnimatePresence>
+                    {showAddCC && (
+                        <motion.div
+                            initial={{ opacity: 0, y: -8 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -8 }}
+                            className="bg-white/5 border border-primary/20 rounded-[1.5rem] p-4 flex flex-col gap-3"
+                        >
+                            <div className="flex items-center gap-2">
+                                <Tag className="w-4 h-4 text-primary" />
+                                <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400 font-bold">Crear Nuevo Centro de Costo</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <input
+                                    autoFocus
+                                    type="text"
+                                    placeholder="Ej. FRAMBUESA NORTE"
+                                    value={newCCName}
+                                    onChange={(e) => setNewCCName(e.target.value)}
+                                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddCC(); } if (e.key === 'Escape') setShowAddCC(false); }}
+                                    className="input-custom-dark flex-1 py-2 text-xs font-bold uppercase text-white"
+                                />
+                                <button
+                                    type="button"
+                                    onClick={handleAddCC}
+                                    disabled={savingCC || !newCCName.trim()}
+                                    className="px-4 py-3 bg-primary text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:opacity-90 disabled:opacity-40 transition-all flex items-center gap-1.5 whitespace-nowrap"
+                                >
+                                    {savingCC ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+                                    Guardar
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => { setShowAddCC(false); setNewCCName(''); }}
+                                    className="text-[10px] font-black uppercase text-zinc-400 hover:text-rose-500 transition-colors px-2"
+                                >
+                                    Cancelar
+                                </button>
+                            </div>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
             </div>
 
             {currentAccount && (
@@ -380,9 +525,19 @@ export function NewMovementForm({ onClose, onSuccess, initialTab = "manual" }: N
                     <motion.form key="manual" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} onSubmit={handleSubmitManual} className="space-y-6">
                         <div className="grid grid-cols-2 gap-4">
                             <FormField label="Tipo">
-                                <div className="flex p-1 bg-white/5 rounded-xl">
-                                    <button type="button" onClick={() => setFormData({...formData, tipo: "Egreso"})} className={`flex-1 py-3 rounded-lg text-[10px] font-black tracking-widest uppercase transition-all ${formData.tipo === 'Egreso' ? "bg-rose-500 text-white" : "text-zinc-400"}`}>Cargo</button>
-                                    <button type="button" onClick={() => setFormData({...formData, tipo: "Ingreso"})} className={`flex-1 py-3 rounded-lg text-[10px] font-black tracking-widest uppercase transition-all ${formData.tipo === 'Ingreso' ? "bg-emerald-500 text-white" : "text-zinc-400"}`}>Abono</button>
+                                <div className="flex flex-col gap-2">
+                                    <div className="flex p-1 bg-white/5 rounded-xl">
+                                        <button type="button" onClick={() => setFormData({...formData, tipo: "Egreso"})} className={`flex-1 py-3 rounded-lg text-[10px] font-black tracking-widest uppercase transition-all ${formData.tipo === 'Egreso' ? "bg-rose-500 text-white" : "text-zinc-400"}`}>Cargo</button>
+                                        <button type="button" onClick={() => setFormData({...formData, tipo: "Traspaso", traspasoType: "out"})} className={`flex-1 py-3 rounded-lg text-[10px] font-black tracking-widest uppercase transition-all ${formData.tipo === 'Traspaso' ? "bg-blue-500 text-white" : "text-zinc-400"}`}>Traspaso</button>
+                                        <button type="button" onClick={() => setFormData({...formData, tipo: "Ingreso"})} className={`flex-1 py-3 rounded-lg text-[10px] font-black tracking-widest uppercase transition-all ${formData.tipo === 'Ingreso' ? "bg-emerald-500 text-white" : "text-zinc-400"}`}>Abono</button>
+                                    </div>
+                                    
+                                    {formData.tipo === 'Traspaso' && (
+                                        <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="flex p-1 bg-blue-500/10 rounded-xl">
+                                            <button type="button" onClick={() => setFormData({...formData, traspasoType: "out"})} className={`flex-1 py-2 rounded-lg text-[10px] font-black tracking-widest uppercase transition-all ${formData.traspasoType === 'out' ? "bg-blue-500 text-white" : "text-blue-400"}`}>Salida (-)</button>
+                                            <button type="button" onClick={() => setFormData({...formData, traspasoType: "in"})} className={`flex-1 py-2 rounded-lg text-[10px] font-black tracking-widest uppercase transition-all ${formData.traspasoType === 'in' ? "bg-blue-500 text-white" : "text-blue-400"}`}>Entrada (+)</button>
+                                        </motion.div>
+                                    )}
                                 </div>
                             </FormField>
                             <FormField label="Fecha">
@@ -450,6 +605,29 @@ export function NewMovementForm({ onClose, onSuccess, initialTab = "manual" }: N
                                 )}
                             </div>
                         </FormField>
+
+                        {formData.tipo === 'Traspaso' && (
+                            <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="p-4 bg-blue-500/10 border border-blue-500/20 rounded-2xl">
+                                <FormField label={`Cuenta Destino para Traspaso de ${formData.traspasoType === 'out' ? 'Salida' : 'Entrada'} (Opcional)`}>
+                                    <select
+                                        value={formData.destinationAccountId}
+                                        onChange={e => setFormData({...formData, destinationAccountId: e.target.value})}
+                                        className="input-custom-dark text-sm"
+                                    >
+                                        <option value="">-- No generar movimiento en otra cuenta --</option>
+                                        {accounts.filter(a => a.id !== currentAccount.id).map(acc => (
+                                            <option key={acc.id} value={acc.id}>
+                                                {acc.banco} - {acc.descripcion} ({acc.moneda})
+                                            </option>
+                                        ))}
+                                    </select>
+                                </FormField>
+                                <p className="text-[10px] font-black uppercase text-blue-400 mt-2 tracking-widest">
+                                    Si seleccionas una cuenta, se insertará automáticamente un movimiento de {formData.traspasoType === 'out' ? 'ENTRADA (+)' : 'SALIDA (-)'} en esa cuenta.
+                                </p>
+                            </motion.div>
+                        )}
+
                         <div className="grid grid-cols-2 gap-4">
                             <FormField label="Monto">
                                 <div className="relative">
@@ -497,16 +675,51 @@ export function NewMovementForm({ onClose, onSuccess, initialTab = "manual" }: N
                             <div className="space-y-6">
                                 <div className="max-h-[350px] overflow-y-auto rounded-[2rem] border border-white/5 bg-zinc-900/20">
                                     <table className="w-full text-left text-xs">
-                                        <thead className="sticky top-0 bg-zinc-900 text-zinc-400 font-bold uppercase tracking-widest border-b border-white/5">
-                                            <tr><th className="p-4 w-10"></th><th className="p-4">Fecha</th><th className="p-4">Descripción</th><th className="p-4 text-right">Monto</th></tr>
+                                        <thead className="sticky top-0 bg-zinc-900 text-zinc-400 font-bold uppercase tracking-widest border-b border-white/5 z-10">
+                                            <tr><th className="p-4 w-10"></th><th className="p-4">Fecha</th><th className="p-4">Descripción</th><th className="p-4">Clasificación</th><th className="p-4 text-right">Monto</th></tr>
                                         </thead>
                                         <tbody className="divide-y divide-white/5">
                                             {previewData.map((m, idx) => (
                                                 <tr key={idx} className={`transition-colors ${m.isDuplicate ? "opacity-30 grayscale" : "hover:bg-white/5"}`}>
                                                     <td className="p-4"><input type="checkbox" checked={selectedMoves.has(idx)} onChange={() => { const n = new Set(selectedMoves); if (n.has(idx)) n.delete(idx); else n.add(idx); setSelectedMoves(n); }} className="w-4 h-4 accent-primary" /></td>
-                                                    <td className="p-4 font-bold text-zinc-200">{m.fecha.split('-').reverse().join('/')}</td>
+                                                    <td className="p-4 font-bold text-zinc-200 whitespace-nowrap">{m.fecha.split('-').reverse().join('/')}</td>
                                                     <td className="p-4"><p className="font-bold text-white truncate max-w-[200px]">{m.concepto}</p>{m.isDuplicate && <span className="text-[9px] font-black text-amber-500 uppercase tracking-tighter flex items-center gap-1 mt-1"><ShieldAlert className="w-2.5 h-2.5" /> Duplicado</span>}</td>
-                                                    <td className="p-4 text-right font-black text-white">${m.monto.toLocaleString()}</td>
+                                                    <td className="p-4">
+                                                        <div className="flex flex-col gap-1.5 min-w-[120px]">
+                                                            <select 
+                                                                value={m.tipo} 
+                                                                onChange={(e) => {
+                                                                    const next = [...previewData];
+                                                                    const prevTipo = next[idx].tipo;
+                                                                    next[idx].tipo = e.target.value;
+                                                                    if (e.target.value === 'Traspaso' && prevTipo === 'Egreso') next[idx].monto = -Math.abs(parseFloat(next[idx].monto));
+                                                                    else if (e.target.value === 'Traspaso' && prevTipo === 'Ingreso') next[idx].monto = Math.abs(parseFloat(next[idx].monto));
+                                                                    else next[idx].monto = Math.abs(parseFloat(next[idx].monto));
+                                                                    setPreviewData(next);
+                                                                }}
+                                                                className="input-custom-dark !p-2 !text-[11px] !rounded-lg"
+                                                            >
+                                                                <option value="Ingreso">Ingreso</option>
+                                                                <option value="Egreso">Egreso</option>
+                                                                <option value="Traspaso">Traspaso</option>
+                                                            </select>
+                                                            <select
+                                                                value={m.centro_costo_id || ''}
+                                                                onChange={(e) => {
+                                                                    const next = [...previewData];
+                                                                    next[idx].centro_costo_id = e.target.value || null;
+                                                                    setPreviewData(next);
+                                                                }}
+                                                                className="input-custom-dark !p-2 !text-[11px] !rounded-lg"
+                                                            >
+                                                                <option value="">-- Sin C.C. --</option>
+                                                                {costCenters.map(cc => <option key={cc.id} value={cc.id}>{cc.nombre}</option>)}
+                                                            </select>
+                                                        </div>
+                                                    </td>
+                                                    <td className={`p-4 text-right font-black ${m.tipo === 'Traspaso' ? 'text-blue-400' : m.tipo === 'Ingreso' ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                                        ${Math.abs(parseFloat(m.monto)).toLocaleString('es-MX', {minimumFractionDigits: 2})}
+                                                    </td>
                                                 </tr>
                                             ))}
                                         </tbody>

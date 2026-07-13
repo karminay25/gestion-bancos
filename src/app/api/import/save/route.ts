@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import crypto from 'crypto';
+import { cleanTerceroName } from '@/lib/nameCleaner';
 
 export async function POST(req: NextRequest) {
     try {
@@ -36,32 +37,36 @@ export async function POST(req: NextRequest) {
 
         const toInsert = chronologicalMovements.map((m: any) => {
             let factura = m.factura || '';
+            let saldoo = null;
             
             if (m.saldo_excel != null) {
                 // BBVA logic: use the provided balance
                 const b = parseFloat(m.saldo_excel);
                 factura = `${factura} [BANCO: ${b.toFixed(2)}]`.trim();
+                saldoo = b;
             } else if (currentBalance !== null) {
                 // Monex logic: calculate running balance
-                if (m.tipo === 'Ingreso') {
-                    currentBalance += m.monto;
+                if (m.tipo === 'Egreso') {
+                    currentBalance -= Math.abs(m.monto);
                 } else {
-                    currentBalance -= m.monto;
+                    currentBalance += m.monto; // Ingreso is positive, Traspaso already has its proper sign
                 }
                 factura = `${factura} [BANCO: ${currentBalance.toFixed(2)}]`.trim();
+                saldoo = currentBalance;
             }
 
             return {
                 id: crypto.randomUUID(),
                 cuenta_id: cuentaId, 
                 fecha: m.fecha,
-                nombre_tercero: (m.descripcion || m.concepto).substring(0, 100),
+                nombre_tercero: cleanTerceroName(m.descripcion || m.concepto),
                 concepto: m.concepto,
                 monto: m.monto,
                 tipo: m.tipo,
                 factura: factura || null,
-                centro_costo_id: centroCostoId || null,
-                temporada_id: temporadaId || null
+                centro_costo_id: m.centro_costo_id || centroCostoId || null,
+                temporada_id: temporadaId || null,
+                saldoo: saldoo
             };
         });
 

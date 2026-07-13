@@ -8,23 +8,57 @@ if (!supabaseAdmin) {
 }
 const supabase = supabaseAdmin!;
 
-const imapConfig = {
-    user: process.env.EMAIL_USER || '',
-    password: process.env.EMAIL_PASS || '',
-    host: process.env.EMAIL_HOST || '',
-    port: parseInt(process.env.EMAIL_PORT || '993'),
-    tls: true,
-    tlsOptions: { rejectUnauthorized: false },
-    connTimeout: 30000,
-    authTimeout: 30000
-};
+// Helper function to build IMAP configs from environment variables
+function getImapConfigs() {
+    const configs = [];
+    
+    // Config 1: Default (Gmail)
+    if (process.env.EMAIL_USER && process.env.EMAIL_PASS && process.env.EMAIL_HOST) {
+        configs.push({
+            user: process.env.EMAIL_USER,
+            password: process.env.EMAIL_PASS,
+            host: process.env.EMAIL_HOST,
+            port: parseInt(process.env.EMAIL_PORT || '993'),
+            tls: true,
+            tlsOptions: { rejectUnauthorized: false },
+            connTimeout: 30000,
+            authTimeout: 30000,
+            name: 'Cuenta Principal (Gmail)'
+        });
+    }
+
+    // Config 2: Outlook
+    if (process.env.EMAIL2_USER && process.env.EMAIL2_PASS && process.env.EMAIL2_HOST) {
+        configs.push({
+            user: process.env.EMAIL2_USER,
+            password: process.env.EMAIL2_PASS,
+            host: process.env.EMAIL2_HOST,
+            port: parseInt(process.env.EMAIL2_PORT || '993'),
+            tls: true,
+            tlsOptions: { rejectUnauthorized: false },
+            connTimeout: 30000,
+            authTimeout: 30000,
+            name: 'Cuenta Secundaria (Outlook)'
+        });
+    }
+
+    return configs;
+}
 
 const xmlParser = new XMLParser({
     ignoreAttributes: false,
     attributeNamePrefix: "@_"
 });
 
-export async function syncInvoicesFromEmail(): Promise<string> {
+export interface SyncResult {
+    emailsScanned: number;
+    xmlsFound: number;
+    alreadyInDB: number;
+    newSaved: number;
+    message: string;
+}
+
+export async function syncInvoicesFromEmail(): Promise<SyncResult> {
     // 1. Determine search start date dynamically based on latest invoice in DB
     let searchDate = 'Jan 1, 2026';
     try {
@@ -49,97 +83,232 @@ export async function syncInvoicesFromEmail(): Promise<string> {
         console.error('Failed to query latest invoice date, defaulting to Jan 1, 2026:', dbErr);
     }
 
-    console.log('Connecting to email:', imapConfig.user);
-    const imap = new Imap(imapConfig);
+    const imapConfigs = getImapConfigs();
+    if (imapConfigs.length === 0) {
+        return {
+            emailsScanned: 0, xmlsFound: 0, alreadyInDB: 0, newSaved: 0,
+            message: 'No hay cuentas de correo configuradas en el sistema.'
+        };
+    }
+
+    let totalScanned = 0;
+    let totalXmls = 0;
+    let totalAlreadyInDB = 0;
+    let totalNewSaved = 0;
+
+    for (const config of imapConfigs) {
+        console.log(`\n--- Sincronizando: ${config.name} (${config.user}) ---`);
+        try {
+            const result = await fetchFromAccount(config, searchDate);
+            totalScanned += result.emailsScanned;
+            totalXmls += result.xmlsFound;
+            totalAlreadyInDB += result.alreadyInDB;
+            totalNewSaved += result.newSaved;
+        } catch (e) {
+            console.error(`Error sincronizando cuenta ${config.user}:`, e);
+            // Continue with other accounts even if one fails
+        }
+    }
+
+    const message = totalNewSaved > 0 
+        ? `${totalNewSaved} factura(s) nueva(s) guardada(s)`
+        : totalAlreadyInDB > 0
+        ? `Correos al día: ${totalAlreadyInDB} factura(s) ya estaban en el sistema`
+        : 'No se encontraron facturas XML en los correos';
+
+    return {
+        emailsScanned: totalScanned,
+        xmlsFound: totalXmls,
+        alreadyInDB: totalAlreadyInDB,
+        newSaved: totalNewSaved,
+        message
+    };
+}
+
+function findAttachments(struct: any, attachments: any[] = []): any[] {
+    if (!struct) return attachments;
+    for (let i = 0; i < struct.length; i++) {
+        if (Array.isArray(struct[i])) {
+            findAttachments(struct[i], attachments);
+        } else if (struct[i] && typeof struct[i] === 'object') {
+            const part = struct[i];
+            if (part.disposition && ['ATTACHMENT', 'INLINE'].includes(part.disposition.type.toUpperCase())) {
+                attachments.push(part);
+            } else if (part.params && (part.params.name || part.params.filename)) {
+                attachments.push(part);
+            }
+        }
+    }
+    return attachments;
+}
+
+async function fetchFromAccount(config: any, searchDate: string): Promise<SyncResult> {
+    console.log('Connecting to email:', config.user);
+    const imap = new Imap(config);
 
     return new Promise((resolve, reject) => {
         let newInvoicesCount = 0;
-        const emailPromises: Promise<void>[] = [];
+        let alreadyInDBCount = 0;
+        let xmlsFoundCount = 0;
+        let emailsScanned = 0;
+        let isDone = false;
+
+        const safeReject = (err: any) => {
+            if (isDone) return;
+            isDone = true;
+            try { imap.end(); } catch (e) {}
+            reject(err);
+        };
+
+        const safeResolve = (val: SyncResult) => {
+            if (isDone) return;
+            isDone = true;
+            try { imap.end(); } catch (e) {}
+            resolve(val);
+        };
 
         imap.once('ready', () => {
             imap.openBox('INBOX', false, (err, box) => {
-                if (err) return reject(err);
+                if (err) return safeReject(err);
 
                 console.log(`Searching inbox for messages SINCE: ${searchDate}`);
                 imap.search([['SINCE', searchDate]], (err, results) => {
-                    if (err) return reject(err);
+                    if (err) return safeReject(err);
                     if (!results || results.length === 0) {
-                        imap.end();
-                        return resolve('No hay correos nuevos desde la fecha de búsqueda');
+                        return safeResolve({
+                            emailsScanned: 0,
+                            xmlsFound: 0,
+                            alreadyInDB: 0,
+                            newSaved: 0,
+                            message: 'No se encontraron correos'
+                        });
                     }
 
-                    console.log(`Found ${results.length} potential messages to parse.`);
-                    const f = imap.fetch(results, { 
-                        bodies: '', 
-                        struct: true
-                    });
+                    emailsScanned = results.length;
+                    console.log(`Found ${results.length} potential messages. Checking structures...`);
+                    
+                    const f = imap.fetch(results, { struct: true });
+                    const partsToFetch: { uid: number, partID: string, encoding: string, filename: string, type: 'xml' | 'zip' }[] = [];
+                    let processedStructs = 0;
 
                     f.on('message', (msg, seqno) => {
-                        const msgPromise = new Promise<void>((msgResolve) => {
-                            msg.on('body', (stream) => {
-                                simpleParser(stream as any, async (err, parsed) => {
-                                    if (err) {
-                                        msgResolve();
-                                        return;
-                                    }
-                                    try {
-                                        for (const att of parsed.attachments) {
-                                            if (att.filename?.toLowerCase().endsWith('.xml')) {
-                                                const inserted = await processXML(att.content.toString(), att.filename);
-                                                if (inserted) newInvoicesCount++;
-                                            } else if (att.filename?.toLowerCase().endsWith('.zip')) {
+                        msg.once('attributes', (attrs) => {
+                            const attachments = findAttachments(attrs.struct);
+                            attachments.forEach(part => {
+                                const filename = part.disposition?.params?.filename || part.params?.name || part.params?.filename;
+                                if (!filename) return;
+                                const ext = filename.split('.').pop().toLowerCase();
+                                if (ext === 'xml' || ext === 'zip') {
+                                    partsToFetch.push({
+                                        uid: attrs.uid,
+                                        partID: part.partID,
+                                        encoding: part.encoding || 'base64',
+                                        filename,
+                                        type: ext as 'xml' | 'zip'
+                                    });
+                                }
+                            });
+                        });
+
+                        msg.once('end', () => {
+                            processedStructs++;
+                        });
+                    });
+
+                    f.once('error', (err) => safeReject(err));
+                    f.once('end', () => {
+                        console.log(`Done structure scan. Found ${partsToFetch.length} attachment parts to fetch.`);
+                        if (partsToFetch.length === 0) {
+                            return safeResolve({
+                                emailsScanned,
+                                xmlsFound: 0,
+                                alreadyInDB: 0,
+                                newSaved: 0,
+                                message: 'No se encontraron facturas XML en los correos nuevos'
+                            });
+                        }
+
+                        // Fetch attachment parts sequentially
+                        let index = 0;
+                        const fetchNext = () => {
+                            if (index >= partsToFetch.length) {
+                                console.log('All attachment parts processed.');
+                                return safeResolve({
+                                    emailsScanned,
+                                    xmlsFound: xmlsFoundCount,
+                                    alreadyInDB: alreadyInDBCount,
+                                    newSaved: newInvoicesCount,
+                                    message: ''
+                                });
+                            }
+
+                            const item = partsToFetch[index];
+                            console.log(`Downloading attachment [${index + 1}/${partsToFetch.length}]: ${item.filename}`);
+                            const f2 = imap.fetch(item.uid, { bodies: item.partID });
+
+                            f2.on('message', (m) => {
+                                m.on('body', (stream, info) => {
+                                    let rawData = '';
+                                    stream.on('data', (chunk) => {
+                                        rawData += chunk.toString();
+                                    });
+                                    stream.on('end', async () => {
+                                        try {
+                                            let content: string | Buffer = rawData;
+                                            if (item.encoding.toLowerCase() === 'base64') {
+                                                content = Buffer.from(rawData, 'base64');
+                                            }
+
+                                            if (item.type === 'xml') {
+                                                xmlsFoundCount++;
+                                                const xmlString = content.toString('utf8');
+                                                const result = await processXML(xmlString, item.filename);
+                                                if (result === 'new') newInvoicesCount++;
+                                                else if (result === 'exists') alreadyInDBCount++;
+                                            } else if (item.type === 'zip') {
                                                 try {
                                                     const AdmZip = require('adm-zip');
-                                                    const zip = new AdmZip(att.content);
+                                                    const zip = new AdmZip(content as Buffer);
                                                     const zipEntries = zip.getEntries();
                                                     for (const zipEntry of zipEntries) {
                                                         if (zipEntry.entryName.toLowerCase().endsWith('.xml')) {
+                                                            xmlsFoundCount++;
                                                             const xmlContent = zipEntry.getData().toString('utf8');
-                                                            const inserted = await processXML(xmlContent, zipEntry.entryName);
-                                                            if (inserted) newInvoicesCount++;
+                                                            const result = await processXML(xmlContent, zipEntry.entryName);
+                                                            if (result === 'new') newInvoicesCount++;
+                                                            else if (result === 'exists') alreadyInDBCount++;
                                                         }
                                                     }
                                                 } catch (zerr) {
                                                     console.error('Failed to extract ZIP:', zerr);
                                                 }
                                             }
+                                        } catch (procErr) {
+                                            console.error(`Error processing part for UID ${item.uid}:`, procErr);
                                         }
-                                    } catch (procErr) {
-                                        console.error('Error processing attachments:', procErr);
-                                    } finally {
-                                        msgResolve();
-                                    }
+                                    });
                                 });
                             });
 
-                            msg.once('error', () => {
-                                msgResolve();
+                            f2.once('end', () => {
+                                index++;
+                                fetchNext();
                             });
-                        });
-                        emailPromises.push(msgPromise);
-                    });
 
-                    f.once('error', (err) => reject(err));
-                    f.once('end', async () => {
-                        try {
-                            console.log('Fetch stream finished. Awaiting active parsing processes...');
-                            await Promise.all(emailPromises);
-                            console.log('All email parsing processes completed.');
-                        } catch (allErr) {
-                            console.error('Error awaiting email parsing promises:', allErr);
-                        } finally {
-                            imap.end();
-                            resolve(newInvoicesCount > 0 
-                                ? `${newInvoicesCount} factura(s) nueva(s) guardada(s) con éxito`
-                                : 'Sincronización al día. No se detectaron nuevas facturas'
-                            );
-                        }
+                            f2.once('error', (err) => {
+                                console.error(`Error fetching part for UID ${item.uid}:`, err);
+                                index++;
+                                fetchNext();
+                            });
+                        };
+
+                        fetchNext();
                     });
                 });
             });
         });
 
-        imap.once('error', (err) => reject(err));
+        imap.once('error', (err) => safeReject(err));
         imap.connect();
     });
 }
@@ -169,16 +338,16 @@ function getAttr(node: any, attrName: string): any {
     return undefined;
 }
 
-async function processXML(xmlContent: string, filename: string): Promise<boolean> {
+async function processXML(xmlContent: string, filename: string): Promise<'new' | 'exists' | null> {
     try {
         const jsonObj = xmlParser.parse(xmlContent);
         const comprobante = findNode(jsonObj, "Comprobante");
-        if (!comprobante) return false;
+        if (!comprobante) return null;
 
         const timbre = findNode(findNode(comprobante, "Complemento"), "TimbreFiscalDigital");
         const uuid = getAttr(timbre, "UUID");
 
-        if (!uuid) return false;
+        if (!uuid) return null;
 
         // 1. QUICK CHECK: Does it already exist in DB?
         const { data: existing } = await supabase
@@ -188,7 +357,7 @@ async function processXML(xmlContent: string, filename: string): Promise<boolean
             .maybeSingle();
 
         if (existing) {
-            return false;
+            return 'exists'; // Already in DB
         }
 
         const emisor = findNode(comprobante, "Emisor");
@@ -215,13 +384,13 @@ async function processXML(xmlContent: string, filename: string): Promise<boolean
             if (error.code !== '23505') { // Ignore unique constraint errors just in case
                 console.error('Error saving invoice metadata:', error);
             }
-            return false;
+            return null;
         } else {
             console.log('--- NEW INVOICE SAVED:', uuid, '---');
-            return true;
+            return 'new';
         }
     } catch (e) {
         console.error('Error parsing XML:', e);
-        return false;
+        return null;
     }
 }

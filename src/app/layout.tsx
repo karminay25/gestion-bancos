@@ -19,6 +19,7 @@ export const metadata: Metadata = {
 };
 
 import { SidebarProvider, useSidebar } from "@/context/SidebarContext";
+import { Toaster } from "react-hot-toast";
 
 export default function RootLayout({
   children,
@@ -39,6 +40,7 @@ export default function RootLayout({
             </main>
           </div>
         </SidebarProvider>
+        <Toaster position="bottom-right" />
       </body>
     </html>
   );

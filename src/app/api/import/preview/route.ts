@@ -18,10 +18,12 @@ export async function POST(req: NextRequest) {
         const fileName = file.name.toUpperCase();
         
         let result: { detectedCompany: any; movements: any[]; suggestedInitialBalance?: number | null } = { detectedCompany: null as any, movements: [] as any[] };
+        let isBBVA = false;
 
         // Auto-detect bank format
         if (fileName.includes('RSM')) {
             result = parseBBVA(buffer);
+            isBBVA = true;
         } else if (fileName.includes('MOVIMIENTOSCONTRATO')) {
             result = parseMonex(buffer);
         } else if (fileName.includes('BAJIO')) {
@@ -31,6 +33,7 @@ export async function POST(req: NextRequest) {
             try {
                 result = parseBBVA(buffer);
                 if (result.movements.length === 0) throw new Error();
+                isBBVA = true;
             } catch {
                 try {
                     result = parseMonex(buffer);
@@ -49,12 +52,71 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: 'No se encontraron movimientos en el archivo. Verifica que sea un Excel bancario válido.' }, { status: 400 });
         }
 
+        // Fetch centros de costo for auto-classification
+        const { data: centrosCosto } = await supabase.from('centros_costo').select('id, nombre');
+
         // Use the selected account for ALL movements
         // (user explicitly selects which account they're importing into)
-        const movementsWithAccounts = allMovements.map(m => ({
-            ...m,
-            targetAccountId: cuentaId
-        }));
+        const movementsWithAccounts = allMovements.map(m => {
+            let tipo = m.tipo;
+            let monto = parseFloat(m.monto);
+            let centro_costo_id = null;
+            let conceptoUpper = (m.concepto || '').toUpperCase();
+
+            // Auto-detect Traspasos
+            if (conceptoUpper.includes('TRASPASO')) {
+                tipo = 'Traspaso';
+                // If it was parsed as Egreso, the money left, so the traspaso is outgoing (-)
+                if (m.tipo === 'Egreso') monto = -Math.abs(monto);
+                else monto = Math.abs(monto); // Ingreso -> incoming (+)
+            }
+
+            // Función para normalizar texto (quitar acentos)
+            const removeAccents = (str: string) => {
+                return str.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+            };
+
+            let conceptoNormal = removeAccents(conceptoUpper);
+            let refNormal = removeAccents((m.referencia || '').toUpperCase());
+
+            // Auto-detect Centro de Costo
+            if (centrosCosto) {
+                // We order CCs by length descending to match more specific names first
+                const sortedCCs = [...centrosCosto].sort((a, b) => b.nombre.length - a.nombre.length);
+                
+                const escapeRegExp = (string: string) => string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                
+                for (const cc of sortedCCs) {
+                    const ccNameRaw = cc.nombre.toUpperCase();
+                    const ccName = removeAccents(ccNameRaw);
+                    
+                    let isMatch = false;
+                    
+                    if (ccName.length <= 4) {
+                        // Use strict word boundaries \b to avoid "OBA" matching "RECIBIDOBAJIO"
+                        const regex = new RegExp(`\\b${escapeRegExp(ccName)}\\b`);
+                        isMatch = regex.test(conceptoNormal) || regex.test(refNormal);
+                    } else {
+                        // For longer words like "NOMINA" or "ARANDANO", allow partial matches
+                        // like "NOMINAS" or "ARANDANOS" by removing the strict \b
+                        isMatch = conceptoNormal.includes(ccName) || refNormal.includes(ccName);
+                    }
+                    
+                    if (isMatch) {
+                        centro_costo_id = cc.id;
+                        break;
+                    }
+                }
+            }
+
+            return {
+                ...m,
+                tipo,
+                monto: monto.toString(), // Keep as string format for consistency
+                centro_costo_id,
+                targetAccountId: cuentaId
+            };
+        });
 
         // DEDUPLICATION LOGIC PER ACCOUNT (Multi-stage fallback)
         const finalMovements = await Promise.all(movementsWithAccounts.map(async (m) => {
@@ -97,9 +159,8 @@ export async function POST(req: NextRequest) {
             };
         }));
 
-        // Reverse to get Oldest First (BBVA comes newest-first; Monex already oldest-first)
-        const isMonex = file.name.toUpperCase().includes('MOVIMIENTOSCONTRATO');
-        const sortedMovements = isMonex ? finalMovements : finalMovements.reverse();
+        // Reverse to get Oldest First (BBVA comes newest-first; Monex and Bajio already oldest-first)
+        const sortedMovements = isBBVA ? finalMovements.reverse() : finalMovements;
 
         return NextResponse.json({
             detectedCompany: result.detectedCompany,

@@ -46,12 +46,15 @@ export function calculateAccountBalance(movements: Movement[]): number {
 
     for (let i = sorted.length - 1; i >= 0; i--) {
         const m = sorted[i];
-        let val = m.saldo_excel;
+        let val = m.saldoo;
         
-        // Check for [BANCO: X] tag in factura field
-        if (!val && m.factura?.includes('[BANCO:')) {
-            const match = m.factura.match(/\[BANCO:\s*([0-9,.-]+)\]/);
-            if (match) val = match[1].replace(/,/g, '');
+        if (val === null || val === undefined || val === '') {
+            val = m.saldo_excel;
+            // Check for [BANCO: X] tag in factura field
+            if (!val && m.factura?.includes('[BANCO:')) {
+                const match = m.factura.match(/\[BANCO:\s*([0-9,.-]+)\]/);
+                if (match) val = match[1].replace(/,/g, '');
+            }
         }
 
         if (val !== null && val !== undefined && val !== '') {
