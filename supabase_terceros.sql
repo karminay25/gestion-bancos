@@ -20,3 +20,10 @@ CREATE INDEX IF NOT EXISTS idx_terceros_nombre_raw ON terceros (nombre_raw);
 -- FROM movimientos
 -- WHERE nombre_tercero IS NOT NULL AND nombre_tercero != ''
 -- ON CONFLICT DO NOTHING;
+
+-- RLS Policies
+ALTER TABLE public.terceros ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Todo el mundo autenticado puede ver terceros" ON public.terceros FOR SELECT USING (auth.role() = 'authenticated');
+CREATE POLICY "Permitir insertar terceros a autenticados" ON public.terceros FOR INSERT WITH CHECK (auth.role() = 'authenticated');
+CREATE POLICY "Permitir actualizar terceros a autenticados" ON public.terceros FOR UPDATE USING (auth.role() = 'authenticated');

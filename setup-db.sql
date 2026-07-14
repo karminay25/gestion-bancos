@@ -35,7 +35,7 @@ CREATE TABLE IF NOT EXISTS public.movimientos (
     cuenta_id UUID REFERENCES public.cuentas_bancarias(id) ON DELETE CASCADE,
     temporada_id UUID REFERENCES public.temporadas(id) ON DELETE SET NULL,
     fecha DATE NOT NULL,
-    tipo TEXT NOT NULL CHECK (tipo IN ('Ingreso', 'Egreso')),
+    tipo TEXT NOT NULL CHECK (tipo IN ('Ingreso', 'Egreso', 'Traspaso')),
     monto DECIMAL(14,2) NOT NULL,
     nombre_tercero TEXT, -- Quién recibe o manda el dinero
     concepto TEXT,
@@ -67,6 +67,8 @@ ALTER TABLE public.perfiles ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Todo el mundo autenticado puede ver" ON public.temporadas FOR SELECT USING (auth.role() = 'authenticated');
 CREATE POLICY "Todo el mundo autenticado puede ver" ON public.cuentas_bancarias FOR SELECT USING (auth.role() = 'authenticated');
 CREATE POLICY "Todo el mundo autenticado puede ver" ON public.centros_costo FOR SELECT USING (auth.role() = 'authenticated');
+CREATE POLICY "Permitir insertar centros de costo a autenticados" ON public.centros_costo FOR INSERT WITH CHECK (auth.role() = 'authenticated');
+CREATE POLICY "Permitir actualizar centros de costo a autenticados" ON public.centros_costo FOR UPDATE USING (auth.role() = 'authenticated');
 CREATE POLICY "Todo el mundo autenticado puede ver" ON public.movimientos FOR SELECT USING (auth.role() = 'authenticated');
 CREATE POLICY "Todo el mundo autenticado puede ver" ON public.perfiles FOR SELECT USING (auth.role() = 'authenticated');
 
