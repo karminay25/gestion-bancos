@@ -963,6 +963,9 @@ export default function MovimientosPage() {
                 from += 1000;
                 to += 1000;
             }
+        } else {
+            // No data returned (empty table or RLS blocking) — exit loop to avoid infinite loading
+            hasMore = false;
         }
     }
 
