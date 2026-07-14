@@ -24,12 +24,14 @@ import {
   ArrowUpDown,
   RefreshCw,
   FileText,
-  FileCheck
+  FileCheck,
+  Edit2
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "@/lib/supabase";
 import * as XLSX from "xlsx";
 import { NewMovementForm } from "@/components/NewMovementForm";
+import { EditMovementModal } from "@/components/EditMovementModal";
 import { calculateAccountBalance, sortMovements } from "@/lib/balances";
 
 // Helper to get Month Name in Spanish
@@ -83,6 +85,7 @@ function AccountLedger({ account, movements, costCenters, terceros, onRefresh }:
     const [newCCName, setNewCCName] = useState("");
     const [savingCC, setSavingCC] = useState(false);
     const [manuallyActivatedCCNames, setManuallyActivatedCCNames] = useState<Set<string>>(new Set());
+    const [editingMovement, setEditingMovement] = useState<any | null>(null);
     const ITEMS_PER_PAGE = 20;
 
     useEffect(() => {
@@ -218,6 +221,13 @@ function AccountLedger({ account, movements, costCenters, terceros, onRefresh }:
     }, [movementsWithBalance]);
 
     useEffect(() => {
+        if (availableMonths.length === 0) return;
+        
+        // If a month is already selected and still valid, do not reset it
+        if (selectedMonth && availableMonths.includes(selectedMonth)) {
+            return;
+        }
+
         const today = new Date().toISOString().slice(0, 7);
         // Prioritize 2026 if today's month isn't available
         const currentYearMonths = availableMonths.filter(m => m.startsWith('2026'));
@@ -226,10 +236,10 @@ function AccountLedger({ account, movements, costCenters, terceros, onRefresh }:
             setSelectedMonth(today);
         } else if (currentYearMonths.length > 0) {
             setSelectedMonth(currentYearMonths[currentYearMonths.length - 1]); // Latest in 2026
-        } else if (availableMonths.length > 0) {
+        } else {
             setSelectedMonth(availableMonths[availableMonths.length - 1]); // Last month with any data
         }
-    }, [availableMonths]);
+    }, [availableMonths, selectedMonth]);
 
     // Reset pagination when filter or month changes
     useEffect(() => {
@@ -709,7 +719,7 @@ function AccountLedger({ account, movements, costCenters, terceros, onRefresh }:
                                             isCalculated = true;
                                         }
 
-                                        return displaySaldo !== null ? (
+                                        return displaySaldo !== null && !isNaN(displaySaldo) ? (
                                             <div className="flex flex-col items-end gap-0.5">
                                                 <span className="text-sm font-black text-zinc-900 dark:text-zinc-50">
                                                     ${displaySaldo.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -719,7 +729,7 @@ function AccountLedger({ account, movements, costCenters, terceros, onRefresh }:
                                                 )}
                                             </div>
                                         ) : (
-                                            <span className="text-[10px] text-zinc-300 italic">No disp.</span>
+                                            <span className="text-xs font-black text-zinc-400 italic">No disp.</span>
                                         );
                                     })()}
                                 </td>
@@ -804,18 +814,28 @@ function AccountLedger({ account, movements, costCenters, terceros, onRefresh }:
                                     })()}
                                 </td>
                                 <td className="px-5 py-5 text-right">
-                                    <button 
-                                        onClick={async () => {
-                                            if (confirm('¿Eliminar este movimiento?')) {
-                                                const { error } = await supabase.from('movimientos').delete().eq('id', move.id);
-                                                if (error) alert('Error al eliminar: ' + error.message);
-                                                else onRefresh();
-                                            }
-                                        }}
-                                        className="p-2 rounded-xl hover:bg-rose-500/10 text-zinc-300 hover:text-rose-500 transition-all"
-                                    >
-                                        <Trash2 className="w-3.5 h-3.5" />
-                                    </button>
+                                    <div className="flex justify-end gap-1">
+                                        <button 
+                                            onClick={() => setEditingMovement(move)}
+                                            className="p-2 rounded-xl hover:bg-blue-500/10 text-zinc-300 hover:text-blue-500 transition-all"
+                                            title="Editar movimiento"
+                                        >
+                                            <Edit2 className="w-3.5 h-3.5" />
+                                        </button>
+                                        <button 
+                                            onClick={async () => {
+                                                if (confirm('¿Eliminar este movimiento?')) {
+                                                    const { error } = await supabase.from('movimientos').delete().eq('id', move.id);
+                                                    if (error) alert('Error al eliminar: ' + error.message);
+                                                    else onRefresh();
+                                                }
+                                            }}
+                                            className="p-2 rounded-xl hover:bg-rose-500/10 text-zinc-300 hover:text-rose-500 transition-all"
+                                            title="Eliminar"
+                                        >
+                                            <Trash2 className="w-3.5 h-3.5" />
+                                        </button>
+                                    </div>
                                 </td>
                             </tr>
                         ))}
@@ -866,6 +886,17 @@ function AccountLedger({ account, movements, costCenters, terceros, onRefresh }:
                     </div>
                 )}
             </div>
+
+            {editingMovement && (
+                <EditMovementModal
+                    movement={editingMovement}
+                    onClose={() => setEditingMovement(null)}
+                    onSuccess={() => {
+                        setEditingMovement(null);
+                        onRefresh();
+                    }}
+                />
+            )}
         </div>
     );
 }
@@ -913,14 +944,18 @@ export default function MovimientosPage() {
     while (hasMore) {
         const { data, error } = await supabase
           .from('movimientos')
-          .select('*, cuentas_bancarias(id, banco, descripcion, moneda, empresa_id, empresas(codigo)), centros_costo(id, nombre), facturas(*)')
+          .select('*, saldoo, cuentas_bancarias(id, banco, descripcion, moneda, empresa_id, empresas(codigo)), centros_costo(id, nombre), facturas(*)')
           .order('fecha', { ascending: false })
           .order('id', { ascending: true }) // Added stable sort tie-breaker
           .range(from, to);
         
-        if (error || !data || data.length === 0) {
-            hasMore = false;
-        } else {
+        if (error) {
+            console.error("Fetch error:", error);
+            throw error;
+        }
+
+        if (data && data.length > 0) {
+            if (from === 0) console.log("First movement fetched:", JSON.stringify(data[0]));
             allMovs = [...allMovs, ...data];
             if (data.length < 1000) {
                 hasMore = false;
