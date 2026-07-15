@@ -116,7 +116,7 @@ export function EditMovementModal({ movement, onClose, onSuccess }: EditMovement
                   required
                   value={formData.fecha}
                   onChange={(e) => setFormData({ ...formData, fecha: e.target.value })}
-                  className="w-full px-4 py-3 bg-zinc-50 dark:bg-zinc-900 border-none rounded-xl focus:ring-2 focus:ring-primary/20 text-sm font-medium transition-all"
+                  className="w-full px-4 py-3 bg-zinc-50 dark:bg-zinc-900 border-none rounded-xl focus:ring-2 focus:ring-primary/20 text-sm font-medium transition-all text-zinc-900 dark:text-zinc-50"
                 />
               </div>
 
@@ -128,11 +128,11 @@ export function EditMovementModal({ movement, onClose, onSuccess }: EditMovement
                   required
                   value={formData.tipo}
                   onChange={(e) => setFormData({ ...formData, tipo: e.target.value })}
-                  className="w-full px-4 py-3 bg-zinc-50 dark:bg-zinc-900 border-none rounded-xl focus:ring-2 focus:ring-primary/20 text-sm font-medium transition-all cursor-pointer"
+                  className="w-full px-4 py-3 bg-zinc-50 dark:bg-zinc-900 border-none rounded-xl focus:ring-2 focus:ring-primary/20 text-sm font-medium transition-all cursor-pointer text-zinc-900 dark:text-zinc-50"
                 >
-                  <option value="Ingreso">Ingreso</option>
-                  <option value="Egreso">Egreso</option>
-                  <option value="Traspaso">Traspaso</option>
+                  <option value="Ingreso" className="dark:bg-zinc-900">Ingreso</option>
+                  <option value="Egreso" className="dark:bg-zinc-900">Egreso</option>
+                  <option value="Traspaso" className="dark:bg-zinc-900">Traspaso</option>
                 </select>
               </div>
             </div>
@@ -149,7 +149,7 @@ export function EditMovementModal({ movement, onClose, onSuccess }: EditMovement
                   value={formData.monto}
                   onChange={(e) => setFormData({ ...formData, monto: e.target.value })}
                   placeholder="0.00"
-                  className="w-full px-4 py-3 bg-zinc-50 dark:bg-zinc-900 border-none rounded-xl focus:ring-2 focus:ring-primary/20 text-sm font-medium transition-all"
+                  className="w-full px-4 py-3 bg-zinc-50 dark:bg-zinc-900 border-none rounded-xl focus:ring-2 focus:ring-primary/20 text-sm font-medium transition-all text-zinc-900 dark:text-zinc-50"
                 />
               </div>
 
@@ -163,7 +163,7 @@ export function EditMovementModal({ movement, onClose, onSuccess }: EditMovement
                   value={formData.saldoo}
                   onChange={(e) => setFormData({ ...formData, saldoo: e.target.value })}
                   placeholder="Dejar vacío para auto"
-                  className="w-full px-4 py-3 bg-zinc-50 dark:bg-zinc-900 border-none rounded-xl focus:ring-2 focus:ring-primary/20 text-sm font-medium transition-all"
+                  className="w-full px-4 py-3 bg-zinc-50 dark:bg-zinc-900 border-none rounded-xl focus:ring-2 focus:ring-primary/20 text-sm font-medium transition-all text-zinc-900 dark:text-zinc-50"
                 />
               </div>
             </div>

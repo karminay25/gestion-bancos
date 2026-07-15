@@ -376,6 +376,22 @@ function AccountLedger({ account, movements, costCenters, terceros, onRefresh }:
         setIsUpdating(null);
     };
 
+    const handleBulkDelete = async () => {
+        if (selectedIds.length === 0) return;
+        if (!confirm(`⚠️ ¿Eliminar ${selectedIds.length} movimiento(s) seleccionado(s)? Esta acción no se puede deshacer.`)) return;
+
+        setIsUpdating("bulk");
+        const { error } = await supabase.from('movimientos').delete().in('id', selectedIds);
+        if (error) {
+            alert('Error al eliminar: ' + error.message);
+        } else {
+            alert(`✅ Se eliminaron ${selectedIds.length} movimiento(s) correctamente.`);
+            setSelectedIds([]);
+            onRefresh();
+        }
+        setIsUpdating(null);
+    };
+
     // 3. Apply local filters and handle Monthly View
     const filteredItems = useMemo(() => {
         const filtered = movementsWithBalance.filter(m => {
@@ -551,17 +567,25 @@ function AccountLedger({ account, movements, costCenters, terceros, onRefresh }:
                             <div className="bg-primary text-white text-[10px] font-black px-2.5 py-1 rounded-full uppercase tracking-widest">
                                 {selectedIds.length} Seleccionados
                             </div>
-                            <p className="text-xs font-bold text-zinc-600 dark:text-zinc-400">Asignación Masiva:</p>
+                            <p className="text-xs font-bold text-zinc-600 dark:text-zinc-400">Acciones Masivas:</p>
                         </div>
                         <div className="flex items-center gap-3">
                             <select 
                                 onChange={(e) => handleBulkCCUpdate(e.target.value)}
                                 className="pl-4 pr-10 py-2 text-[10px] font-black uppercase rounded-xl border-none bg-white dark:bg-zinc-900 shadow-sm focus:ring-2 focus:ring-primary/20 text-zinc-900 dark:text-zinc-50 appearance-none cursor-pointer"
                             >
-                                <option value="" className="dark:bg-zinc-900">Seleccionar Centro...</option>
+                                <option value="" className="dark:bg-zinc-900">Asignar Centro de Costo...</option>
                                 <option value="null" className="dark:bg-zinc-900">-- Quitar Centro --</option>
                                 {costCenters.filter(cc => !ARCHIVED_COST_CENTERS.has(cc.nombre.toUpperCase().trim()) || manuallyActivatedCCNames.has(cc.nombre.toUpperCase().trim())).map(cc => <option key={cc.id} value={cc.id} className="dark:bg-zinc-900">{cc.nombre}</option>)}
                             </select>
+                            <button 
+                                onClick={handleBulkDelete}
+                                disabled={isUpdating === "bulk"}
+                                className="flex items-center gap-2 px-4 py-2 bg-rose-500/10 text-rose-600 dark:text-rose-400 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-rose-500 hover:text-white transition-all disabled:opacity-50 border border-rose-500/20"
+                            >
+                                <Trash2 className="w-3.5 h-3.5" />
+                                Eliminar Selección
+                            </button>
                             <button onClick={() => setSelectedIds([])} className="text-[10px] font-black uppercase text-zinc-400 hover:text-rose-500 transition-colors px-4">Cancelar</button>
                         </div>
                     </motion.div>
