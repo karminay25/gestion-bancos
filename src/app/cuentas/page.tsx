@@ -14,8 +14,10 @@ import {
 import { supabase } from "@/lib/supabase";
 import { calculateAccountBalance, sortMovements } from "@/lib/balances";
 import NewAccountModal from "@/components/NewAccountModal";
+import { useAuth } from "@/context/AuthContext";
 
 export default function CuentasPage() {
+  const { isAdmin } = useAuth();
   const [data, setData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedCompanies, setExpandedCompanies] = useState<string[]>([]);
@@ -114,13 +116,15 @@ export default function CuentasPage() {
           <h1 className="text-4xl font-black tracking-tight text-zinc-900 dark:text-zinc-50">Cuentas Bancarias</h1>
           <p className="text-zinc-500 mt-1 dark:text-zinc-200 font-medium">Gestión de activos líquidos por entidad legal.</p>
         </div>
-        <button 
-          onClick={() => setIsModalOpen(true)}
-          className="flex items-center gap-2 rounded-2xl bg-primary px-6 py-3 text-sm font-bold text-zinc-50 shadow-xl shadow-primary/20 hover:scale-[1.02] transition-all active:scale-95"
-        >
-          <Plus className="w-5 h-5" />
-          Nueva Cuenta
-        </button>
+        {isAdmin && (
+          <button
+            onClick={() => setIsModalOpen(true)}
+            className="flex items-center gap-2 rounded-2xl bg-primary px-6 py-3 text-sm font-bold text-zinc-50 shadow-xl shadow-primary/20 hover:scale-[1.02] transition-all active:scale-95"
+          >
+            <Plus className="w-5 h-5" />
+            Nueva Cuenta
+          </button>
+        )}
       </div>
 
       <div className="space-y-12">

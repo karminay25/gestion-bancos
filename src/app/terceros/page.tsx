@@ -7,6 +7,8 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "@/lib/supabase";
+import { formatCostCenter } from "@/lib/costCenter";
+import { useAuth } from "@/context/AuthContext";
 
 const ARCHIVED_COST_CENTERS = new Set([
   'ACTIVO LOLA',
@@ -39,6 +41,7 @@ const ARCHIVED_COST_CENTERS = new Set([
 ]);
 
 export default function TercerosPage() {
+  const { isAdmin } = useAuth();
   const [terceros, setTerceros] = useState<any[]>([]);
   const [costCenters, setCostCenters] = useState<any[]>([]);
   const [companies, setCompanies] = useState<any[]>([]);
@@ -71,7 +74,7 @@ export default function TercerosPage() {
     setLoading(true);
     setError(null);
     const [{ data: t, error: te }, { data: cc }, { data: empRes }, movRes] = await Promise.all([
-      supabase.from('terceros').select('*, centros_costo(id, nombre), empresas(id, codigo, nombre_completo)').order('nombre_canonico'),
+      supabase.from('terceros').select('*, centros_costo(id, nombre, numero), empresas(id, codigo, nombre_completo)').order('nombre_canonico'),
       supabase.from('centros_costo').select('*').order('nombre'),
       supabase.from('empresas').select('*'),
       supabase.from('movimientos').select('nombre_tercero, monto, tipo')
@@ -171,20 +174,24 @@ export default function TercerosPage() {
           <p className="text-zinc-500 mt-1 dark:text-zinc-400">Proveedores y beneficiarios normalizados para reportes consistentes.</p>
         </div>
         <div className="flex items-center gap-3">
-          <button
-            onClick={handleAutoPopulate}
-            className="flex items-center gap-2 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-4 py-2.5 text-sm font-bold text-zinc-700 dark:text-zinc-300 hover:border-primary/50 transition-all"
-          >
-            <Sparkles className="w-4 h-4 text-primary" />
-            Auto-poblar del historial
-          </button>
-          <button
-            onClick={() => setShowNew(true)}
-            className="flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-zinc-50 shadow-lg shadow-primary/20 hover:opacity-90 transition-all"
-          >
-            <Plus className="w-5 h-5" />
-            Nuevo Tercero
-          </button>
+          {isAdmin && (
+            <>
+              <button
+                onClick={handleAutoPopulate}
+                className="flex items-center gap-2 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-4 py-2.5 text-sm font-bold text-zinc-700 dark:text-zinc-300 hover:border-primary/50 transition-all"
+              >
+                <Sparkles className="w-4 h-4 text-primary" />
+                Auto-poblar del historial
+              </button>
+              <button
+                onClick={() => setShowNew(true)}
+                className="flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-zinc-50 shadow-lg shadow-primary/20 hover:opacity-90 transition-all"
+              >
+                <Plus className="w-5 h-5" />
+                Nuevo Tercero
+              </button>
+            </>
+          )}
         </div>
       </div>
 
@@ -229,7 +236,7 @@ export default function TercerosPage() {
           >
             <option value="">Todos los Centros</option>
             <option value="__none__">Sin clasificar</option>
-            {costCenters.filter(cc => !ARCHIVED_COST_CENTERS.has(cc.nombre.toUpperCase().trim())).map(cc => <option key={cc.id} value={cc.id}>{cc.nombre}</option>)}
+            {costCenters.filter(cc => !ARCHIVED_COST_CENTERS.has(cc.nombre.toUpperCase().trim())).map(cc => <option key={cc.id} value={cc.id}>{formatCostCenter(cc)}</option>)}
           </select>
         </div>
         <button
@@ -291,11 +298,11 @@ export default function TercerosPage() {
                         className="text-xs font-bold bg-zinc-100 dark:bg-zinc-800 rounded-lg px-3 py-1.5 border-none focus:ring-2 focus:ring-primary/30 dark:text-white"
                       >
                         <option value="">Sin clasificar</option>
-                        {costCenters.filter(cc => !ARCHIVED_COST_CENTERS.has(cc.nombre.toUpperCase().trim()) || cc.id.toString() === editCC).map(cc => <option key={cc.id} value={cc.id}>{cc.nombre}</option>)}
+                        {costCenters.filter(cc => !ARCHIVED_COST_CENTERS.has(cc.nombre.toUpperCase().trim()) || cc.id.toString() === editCC).map(cc => <option key={cc.id} value={cc.id}>{formatCostCenter(cc)}</option>)}
                       </select>
                     ) : (
                       t.centros_costo ? (
-                        <span className="px-2.5 py-1 rounded-lg bg-primary/10 text-primary text-[10px] font-black uppercase tracking-wider">{t.centros_costo.nombre}</span>
+                        <span className="px-2.5 py-1 rounded-lg bg-primary/10 text-primary text-[10px] font-black uppercase tracking-wider">{formatCostCenter(t.centros_costo)}</span>
                       ) : (
                         <span className="text-[10px] text-zinc-300 dark:text-zinc-600 italic">Sin clasificar</span>
                       )
@@ -317,7 +324,7 @@ export default function TercerosPage() {
                           <X className="w-4 h-4" />
                         </button>
                       </div>
-                    ) : (
+                    ) : isAdmin ? (
                       <div className="flex items-center gap-2 justify-end">
                         <button
                           onClick={() => { setEditingId(t.id); setEditCanon(t.nombre_canonico); setEditCC(t.centro_costo_id?.toString() || ''); setEditNotes(t.notas || ''); }}
@@ -329,6 +336,8 @@ export default function TercerosPage() {
                           <X className="w-3.5 h-3.5" />
                         </button>
                       </div>
+                    ) : (
+                      <span className="text-[9px] font-black uppercase text-zinc-300">Solo lectura</span>
                     )}
                   </td>
                 </tr>
@@ -368,7 +377,7 @@ export default function TercerosPage() {
                   <select value={newCC} onChange={e => setNewCC(e.target.value)}
                     className="w-full mt-1 p-3 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-primary text-sm appearance-none">
                     <option value="">Sin clasificar</option>
-                    {costCenters.filter(cc => !ARCHIVED_COST_CENTERS.has(cc.nombre.toUpperCase().trim())).map(cc => <option key={cc.id} value={cc.id}>{cc.nombre}</option>)}
+                    {costCenters.filter(cc => !ARCHIVED_COST_CENTERS.has(cc.nombre.toUpperCase().trim())).map(cc => <option key={cc.id} value={cc.id}>{formatCostCenter(cc)}</option>)}
                   </select>
                 </div>
                 <div>

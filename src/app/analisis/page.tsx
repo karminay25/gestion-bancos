@@ -11,6 +11,7 @@ import {
   ResponsiveContainer, PieChart, Pie, Cell, AreaChart, Area, LabelList
 } from "recharts";
 import { supabase } from "@/lib/supabase";
+import { formatCostCenter } from "@/lib/costCenter";
 import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, isWithinInterval, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
 
@@ -106,7 +107,7 @@ export default function AnalisisPage() {
       while (hasMore) {
         const { data, error } = await supabase
           .from('movimientos')
-          .select('*, cuentas_bancarias(moneda, empresas(id, codigo)), centros_costo(nombre), temporadas(nombre)')
+          .select('*, cuentas_bancarias(moneda, empresas(id, codigo)), centros_costo(nombre, numero), temporadas(nombre)')
           .order('fecha', { ascending: false })
           .order('id', { ascending: true })
           .range(from, to);
@@ -155,7 +156,7 @@ export default function AnalisisPage() {
     const totalIncome = filteredData.filter(m => m.tipo === 'Ingreso').reduce((s, m) => s + parseFloat(m.monto), 0);
     const totalExpense = filteredData.filter(m => m.tipo === 'Egreso').reduce((s, m) => s + parseFloat(m.monto), 0);
     const byCC = filteredData.filter(m => m.tipo === 'Egreso').reduce((acc: any, m) => {
-      const name = m.centros_costo?.nombre || "Sin Clasificar";
+      const name = m.centros_costo ? formatCostCenter(m.centros_costo) : "Sin Clasificar";
       acc[name] = (acc[name] || 0) + parseFloat(m.monto);
       return acc;
     }, {});
@@ -240,7 +241,7 @@ export default function AnalisisPage() {
             <select value={selectedCC} onChange={e => setSelectedCC(e.target.value)} className="bg-transparent text-xs font-black uppercase text-zinc-600 dark:text-zinc-400 border-none focus:ring-0">
               <option value="all">Todos los Centros</option>
               {costCenters.filter(cc => !ARCHIVED_COST_CENTERS.has(cc.nombre.toUpperCase().trim()) || manuallyActivatedCCNames.has(cc.nombre.toUpperCase().trim()) || cc.id.toString() === selectedCC).map(cc => (
-                <option key={cc.id} value={cc.id}>{cc.nombre}</option>
+                <option key={cc.id} value={cc.id}>{formatCostCenter(cc)}</option>
               ))}
             </select>
           </div>
@@ -468,7 +469,7 @@ export default function AnalisisPage() {
             <h3 className="text-xl font-black text-zinc-900 dark:text-zinc-50 uppercase tracking-tighter">Consulta de Movimientos</h3>
             <p className="text-xs text-zinc-500 font-bold uppercase mt-1">
               {selectedCC !== "all" 
-                ? `Mostrando movimientos del Centro de Costo: ${costCenters.find(cc => cc.id.toString() === selectedCC)?.nombre}`
+                ? `Mostrando movimientos del Centro de Costo: ${formatCostCenter(costCenters.find(cc => cc.id.toString() === selectedCC))}`
                 : "Listado general de movimientos filtrados"
               }
             </p>
@@ -516,7 +517,7 @@ export default function AnalisisPage() {
                     </td>
                     <td className="px-5 py-4">
                       <span className="px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-600 dark:text-amber-400 text-[10px] font-bold">
-                        {move.centros_costo?.nombre || 'Gral'}
+                        {move.centros_costo ? formatCostCenter(move.centros_costo) : 'Gral'}
                       </span>
                     </td>
                     <td className={`px-5 py-4 text-right font-black text-sm ${isEgreso ? 'text-rose-500' : isTraspaso ? 'text-blue-500' : 'text-emerald-500'}`}>

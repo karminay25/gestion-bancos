@@ -29,10 +29,12 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "@/lib/supabase";
+import { formatCostCenter } from "@/lib/costCenter";
 import * as XLSX from "xlsx";
 import { NewMovementForm } from "@/components/NewMovementForm";
 import { EditMovementModal } from "@/components/EditMovementModal";
 import { calculateAccountBalance, sortMovements } from "@/lib/balances";
+import { useAuth } from "@/context/AuthContext";
 
 // Helper to get Month Name in Spanish
 const getMonthName = (monthStr: string) => {
@@ -73,7 +75,7 @@ const ARCHIVED_COST_CENTERS = new Set([
 ]);
 
 // Sub-component for each account's ledger to manage local filters and pagination
-function AccountLedger({ account, movements, costCenters, terceros, onRefresh }: { account: any, movements: any[], costCenters: any[], terceros: any[], onRefresh: () => void }) {
+function AccountLedger({ account, movements, costCenters, terceros, onRefresh, isAdmin }: { account: any, movements: any[], costCenters: any[], terceros: any[], onRefresh: () => void, isAdmin: boolean }) {
     const [searchTerm, setSearchTerm] = useState("");
     const [selectedCC, setSelectedCC] = useState("");
     const [selectedMonth, setSelectedMonth] = useState<string>("");
@@ -484,20 +486,22 @@ function AccountLedger({ account, movements, costCenters, terceros, onRefresh }:
                             onChange={(e) => setSelectedCC(e.target.value)}
                         >
                             <option value="" className="dark:bg-zinc-900">Todos los Centros</option>
-                            {costCenters.filter(cc => !ARCHIVED_COST_CENTERS.has(cc.nombre.toUpperCase().trim()) || manuallyActivatedCCNames.has(cc.nombre.toUpperCase().trim())).map(cc => <option key={cc.id} value={cc.id} className="dark:bg-zinc-900">{cc.nombre}</option>)}
+                            {costCenters.filter(cc => !ARCHIVED_COST_CENTERS.has(cc.nombre.toUpperCase().trim()) || manuallyActivatedCCNames.has(cc.nombre.toUpperCase().trim())).map(cc => <option key={cc.id} value={cc.id} className="dark:bg-zinc-900">{formatCostCenter(cc)}</option>)}
                         </select>
                     </div>
-                    <button
-                        onClick={() => setShowAddCC(v => !v)}
-                        title="Agregar nuevo centro de costo"
-                        className="flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 text-zinc-400 hover:text-primary hover:border-primary/50 transition-all"
-                    >
-                        <Plus className="w-4 h-4" />
-                    </button>
+                    {isAdmin && (
+                        <button
+                            onClick={() => setShowAddCC(v => !v)}
+                            title="Agregar nuevo centro de costo"
+                            className="flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 text-zinc-400 hover:text-primary hover:border-primary/50 transition-all"
+                        >
+                            <Plus className="w-4 h-4" />
+                        </button>
+                    )}
                 </div>
                 <div className="relative col-span-1">
                     <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-400" />
-                    <select 
+                    <select
                         className="w-full pl-9 pr-4 py-2.5 text-xs rounded-xl border-none bg-white dark:bg-zinc-900 appearance-none focus:ring-2 focus:ring-primary/20 dark:text-zinc-50 font-bold"
                         value={sortOrder}
                         onChange={(e) => setSortOrder(e.target.value as "desc" | "asc")}
@@ -506,19 +510,21 @@ function AccountLedger({ account, movements, costCenters, terceros, onRefresh }:
                         <option value="asc">Más Antiguos</option>
                     </select>
                 </div>
-                <button 
-                    onClick={handleBulkClean}
-                    disabled={isUpdating === "bulk"}
-                    className="flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-500 hover:text-white transition-all disabled:opacity-50"
-                >
-                    <Sparkles className="w-3.5 h-3.5" />
-                    Limpieza Inteligente
-                </button>
+                {isAdmin && (
+                    <button
+                        onClick={handleBulkClean}
+                        disabled={isUpdating === "bulk"}
+                        className="flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-500 hover:text-white transition-all disabled:opacity-50"
+                    >
+                        <Sparkles className="w-3.5 h-3.5" />
+                        Limpieza Inteligente
+                    </button>
+                )}
             </div>
 
             {/* Inline modal: add new cost center */}
             <AnimatePresence>
-                {showAddCC && (
+                {isAdmin && showAddCC && (
                     <motion.div
                         initial={{ opacity: 0, y: -8 }}
                         animate={{ opacity: 1, y: 0 }}
@@ -556,7 +562,7 @@ function AccountLedger({ account, movements, costCenters, terceros, onRefresh }:
 
             {/* Bulk Actions Bar */}
             <AnimatePresence>
-                {selectedIds.length > 0 && (
+                {isAdmin && selectedIds.length > 0 && (
                     <motion.div 
                         initial={{ height: 0, opacity: 0 }} 
                         animate={{ height: 'auto', opacity: 1 }} 
@@ -576,7 +582,7 @@ function AccountLedger({ account, movements, costCenters, terceros, onRefresh }:
                             >
                                 <option value="" className="dark:bg-zinc-900">Asignar Centro de Costo...</option>
                                 <option value="null" className="dark:bg-zinc-900">-- Quitar Centro --</option>
-                                {costCenters.filter(cc => !ARCHIVED_COST_CENTERS.has(cc.nombre.toUpperCase().trim()) || manuallyActivatedCCNames.has(cc.nombre.toUpperCase().trim())).map(cc => <option key={cc.id} value={cc.id} className="dark:bg-zinc-900">{cc.nombre}</option>)}
+                                {costCenters.filter(cc => !ARCHIVED_COST_CENTERS.has(cc.nombre.toUpperCase().trim()) || manuallyActivatedCCNames.has(cc.nombre.toUpperCase().trim())).map(cc => <option key={cc.id} value={cc.id} className="dark:bg-zinc-900">{formatCostCenter(cc)}</option>)}
                             </select>
                             <button 
                                 onClick={handleBulkDelete}
@@ -598,15 +604,17 @@ function AccountLedger({ account, movements, costCenters, terceros, onRefresh }:
                     <thead>
                         <tr className="bg-zinc-50/50 dark:bg-zinc-900/50 border-b border-zinc-100 dark:border-zinc-800">
                             <th className="px-5 py-5 w-10">
-                                <input 
-                                    type="checkbox" 
-                                    onChange={(e) => {
-                                        if (e.target.checked) setSelectedIds(paginatedItems.map(m => m.id));
-                                        else setSelectedIds([]);
-                                    }}
-                                    checked={selectedIds.length > 0 && selectedIds.length === paginatedItems.length}
-                                    className="rounded border-zinc-300 text-primary focus:ring-primary"
-                                />
+                                {isAdmin && (
+                                    <input
+                                        type="checkbox"
+                                        onChange={(e) => {
+                                            if (e.target.checked) setSelectedIds(paginatedItems.map(m => m.id));
+                                            else setSelectedIds([]);
+                                        }}
+                                        checked={selectedIds.length > 0 && selectedIds.length === paginatedItems.length}
+                                        className="rounded border-zinc-300 text-primary focus:ring-primary"
+                                    />
+                                )}
                             </th>
                             <th className="px-5 py-5 text-[9px] font-black uppercase tracking-widest text-zinc-400 dark:text-zinc-300">Fecha</th>
                             <th className="px-5 py-5 text-[9px] font-black uppercase tracking-widest text-zinc-400 dark:text-zinc-300 min-w-[180px]">Nombre</th>
@@ -623,15 +631,17 @@ function AccountLedger({ account, movements, costCenters, terceros, onRefresh }:
                         {paginatedItems.map((move: any) => (
                             <tr key={move.id} className={`hover:bg-zinc-50/30 dark:hover:bg-zinc-900/30 transition-colors ${selectedIds.includes(move.id) ? "bg-primary/[0.03] dark:bg-primary/[0.05]" : ""}`}>
                                 <td className="px-5 py-5">
-                                    <input 
-                                        type="checkbox" 
-                                        checked={selectedIds.includes(move.id)}
-                                        onChange={(e) => {
-                                            if (e.target.checked) setSelectedIds(prev => [...prev, move.id]);
-                                            else setSelectedIds(prev => prev.filter(id => id !== move.id));
-                                        }}
-                                        className="rounded border-zinc-300 text-primary focus:ring-primary"
-                                    />
+                                    {isAdmin && (
+                                        <input
+                                            type="checkbox"
+                                            checked={selectedIds.includes(move.id)}
+                                            onChange={(e) => {
+                                                if (e.target.checked) setSelectedIds(prev => [...prev, move.id]);
+                                                else setSelectedIds(prev => prev.filter(id => id !== move.id));
+                                            }}
+                                            className="rounded border-zinc-300 text-primary focus:ring-primary"
+                                        />
+                                    )}
                                 </td>
                                 <td className="px-5 py-5 text-[11px] font-bold text-zinc-500 dark:text-zinc-300 whitespace-nowrap">
                                     {move.fecha.split('-').reverse().join('/')}
@@ -649,8 +659,9 @@ function AccountLedger({ account, movements, costCenters, terceros, onRefresh }:
                                             return (
                                               <>
                                                 <div className="flex items-center gap-2">
-                                                    <input 
+                                                    <input
                                                         type="text"
+                                                        readOnly={!isAdmin}
                                                         defaultValue={hasDiff ? terc.nombre_canonico : (move.nombre_tercero || '')}
                                                         placeholder="Nombre del Tercero..."
                                                         onBlur={(e) => {
@@ -659,12 +670,12 @@ function AccountLedger({ account, movements, costCenters, terceros, onRefresh }:
                                                                 handleNombreUpdate(move.id, val);
                                                             }
                                                         }}
-                                                        className={`w-full bg-transparent border-none focus:ring-1 focus:ring-primary/20 rounded-lg text-xs font-black transition-all ${hasDiff ? "text-primary italic" : "text-zinc-900 dark:text-zinc-50"} ${isUpdating === move.id ? "opacity-50" : "hover:bg-zinc-100 dark:hover:bg-zinc-800"}`}
+                                                        className={`w-full bg-transparent border-none focus:ring-1 focus:ring-primary/20 rounded-lg text-xs font-black transition-all ${hasDiff ? "text-primary italic" : "text-zinc-900 dark:text-zinc-50"} ${isUpdating === move.id ? "opacity-50" : isAdmin ? "hover:bg-zinc-100 dark:hover:bg-zinc-800" : ""}`}
                                                     />
-                                                    
+
                                                     {/* REVERT BUTTON: If corrected, allow restoring original */}
-                                                    {hasDiff && (
-                                                        <button 
+                                                    {isAdmin && hasDiff && (
+                                                        <button
                                                             onClick={() => handleNombreUpdate(move.id, move.nombre_tercero)}
                                                             title="Restaurar nombre original del banco"
                                                             className="p-1.5 rounded-lg text-zinc-300 hover:text-rose-500 transition-colors"
@@ -674,8 +685,8 @@ function AccountLedger({ account, movements, costCenters, terceros, onRefresh }:
                                                     )}
 
                                                     {/* If it was edited manually and not in directory, offer to save */}
-                                                    {!terc && move.nombre_tercero && (
-                                                        <button 
+                                                    {isAdmin && !terc && move.nombre_tercero && (
+                                                        <button
                                                             onClick={async () => {
                                                                 const { error } = await supabase.from('terceros').insert({
                                                                     nombre_raw: move.nombre_tercero,
@@ -775,8 +786,9 @@ function AccountLedger({ account, movements, costCenters, terceros, onRefresh }:
                                                     </span>
                                                 </div>
                                             ) : (
-                                                <input 
+                                                <input
                                                     type="text"
+                                                    readOnly={!isAdmin}
                                                     defaultValue={move.factura?.split('[BANCO:')[0] || ''}
                                                     placeholder="-"
                                                     onBlur={(e) => {
@@ -786,15 +798,16 @@ function AccountLedger({ account, movements, costCenters, terceros, onRefresh }:
                                                             handleFacturaUpdate(move.id, e.target.value + bancoTag);
                                                         }
                                                     }}
-                                                    className={`w-full bg-transparent border-none focus:ring-1 focus:ring-primary/20 rounded-lg text-[10px] font-mono font-black uppercase text-zinc-400 dark:text-zinc-300 transition-all ${isUpdating === move.id ? "opacity-50" : "hover:bg-zinc-100 dark:hover:bg-zinc-800"}`}
+                                                    className={`w-full bg-transparent border-none focus:ring-1 focus:ring-primary/20 rounded-lg text-[10px] font-mono font-black uppercase text-zinc-400 dark:text-zinc-300 transition-all ${isUpdating === move.id ? "opacity-50" : isAdmin ? "hover:bg-zinc-100 dark:hover:bg-zinc-800" : ""}`}
                                                 />
                                             );
                                         })()}
                                     </div>
                                 </td>
                                 <td className="px-5 py-5 min-w-[300px]">
-                                    <textarea 
+                                    <textarea
                                         rows={1}
+                                        readOnly={!isAdmin}
                                         defaultValue={move.concepto || ''}
                                         placeholder="Escribe el concepto detallado..."
                                         onBlur={(e) => {
@@ -802,7 +815,7 @@ function AccountLedger({ account, movements, costCenters, terceros, onRefresh }:
                                                 handleConceptoUpdate(move.id, e.target.value);
                                             }
                                         }}
-                                        className={`w-full bg-transparent border-none focus:ring-1 focus:ring-primary/20 rounded-lg text-[10px] text-zinc-500 dark:text-zinc-300 transition-all resize-none overflow-hidden hover:overflow-y-auto max-h-20 ${isUpdating === move.id ? "opacity-50" : "hover:bg-zinc-100 dark:hover:bg-zinc-800"}`}
+                                        className={`w-full bg-transparent border-none focus:ring-1 focus:ring-primary/20 rounded-lg text-[10px] text-zinc-500 dark:text-zinc-300 transition-all resize-none overflow-hidden hover:overflow-y-auto max-h-20 ${isUpdating === move.id ? "opacity-50" : isAdmin ? "hover:bg-zinc-100 dark:hover:bg-zinc-800" : ""}`}
                                         onInput={(e) => {
                                             const target = e.target as HTMLTextAreaElement;
                                             target.style.height = 'auto';
@@ -818,14 +831,14 @@ function AccountLedger({ account, movements, costCenters, terceros, onRefresh }:
                                         
                                         return (
                                             <div className="relative group/cc">
-                                                <select 
+                                                <select
                                                     value={move.centro_costo_id || ""}
-                                                    disabled={isUpdating === move.id}
+                                                    disabled={!isAdmin || isUpdating === move.id}
                                                     onChange={(e) => handleCCUpdate(move.id, e.target.value)}
                                                     className={`text-[9px] font-black uppercase px-2 py-1 rounded-xl border-none focus:ring-2 focus:ring-primary/20 appearance-none cursor-pointer transition-all ${hasSuggestion ? "bg-primary/10 text-primary border border-primary/20 animate-pulse" : "bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-50 hover:bg-zinc-200 dark:hover:bg-zinc-700"} ${isUpdating === move.id ? "opacity-50" : ""}`}
                                                 >
-                                                    <option value="" className="dark:bg-zinc-900">{hasSuggestion ? `SUG: ${suggestedCC?.nombre}` : "Gral"}</option>
-                                                    {costCenters.filter(cc => !ARCHIVED_COST_CENTERS.has(cc.nombre.toUpperCase().trim()) || manuallyActivatedCCNames.has(cc.nombre.toUpperCase().trim()) || cc.id === move.centro_costo_id).map(cc => <option key={cc.id} value={cc.id} className="dark:bg-zinc-900">{cc.nombre}</option>)}
+                                                    <option value="" className="dark:bg-zinc-900">{hasSuggestion ? `SUG: ${formatCostCenter(suggestedCC)}` : "Gral"}</option>
+                                                    {costCenters.filter(cc => !ARCHIVED_COST_CENTERS.has(cc.nombre.toUpperCase().trim()) || manuallyActivatedCCNames.has(cc.nombre.toUpperCase().trim()) || cc.id === move.centro_costo_id).map(cc => <option key={cc.id} value={cc.id} className="dark:bg-zinc-900">{formatCostCenter(cc)}</option>)}
                                                 </select>
                                                 {hasSuggestion && (
                                                     <div className="absolute -top-3 left-1 flex items-center gap-1 opacity-0 group-hover/cc:opacity-100 transition-opacity">
@@ -839,26 +852,32 @@ function AccountLedger({ account, movements, costCenters, terceros, onRefresh }:
                                 </td>
                                 <td className="px-5 py-5 text-right">
                                     <div className="flex justify-end gap-1">
-                                        <button 
-                                            onClick={() => setEditingMovement(move)}
-                                            className="p-2 rounded-xl hover:bg-blue-500/10 text-zinc-300 hover:text-blue-500 transition-all"
-                                            title="Editar movimiento"
-                                        >
-                                            <Edit2 className="w-3.5 h-3.5" />
-                                        </button>
-                                        <button 
-                                            onClick={async () => {
-                                                if (confirm('¿Eliminar este movimiento?')) {
-                                                    const { error } = await supabase.from('movimientos').delete().eq('id', move.id);
-                                                    if (error) alert('Error al eliminar: ' + error.message);
-                                                    else onRefresh();
-                                                }
-                                            }}
-                                            className="p-2 rounded-xl hover:bg-rose-500/10 text-zinc-300 hover:text-rose-500 transition-all"
-                                            title="Eliminar"
-                                        >
-                                            <Trash2 className="w-3.5 h-3.5" />
-                                        </button>
+                                        {isAdmin ? (
+                                            <>
+                                                <button
+                                                    onClick={() => setEditingMovement(move)}
+                                                    className="p-2 rounded-xl hover:bg-blue-500/10 text-zinc-300 hover:text-blue-500 transition-all"
+                                                    title="Editar movimiento"
+                                                >
+                                                    <Edit2 className="w-3.5 h-3.5" />
+                                                </button>
+                                                <button
+                                                    onClick={async () => {
+                                                        if (confirm('¿Eliminar este movimiento?')) {
+                                                            const { error } = await supabase.from('movimientos').delete().eq('id', move.id);
+                                                            if (error) alert('Error al eliminar: ' + error.message);
+                                                            else onRefresh();
+                                                        }
+                                                    }}
+                                                    className="p-2 rounded-xl hover:bg-rose-500/10 text-zinc-300 hover:text-rose-500 transition-all"
+                                                    title="Eliminar"
+                                                >
+                                                    <Trash2 className="w-3.5 h-3.5" />
+                                                </button>
+                                            </>
+                                        ) : (
+                                            <span className="text-[9px] font-black uppercase text-zinc-300">Solo lectura</span>
+                                        )}
                                     </div>
                                 </td>
                             </tr>
@@ -926,6 +945,7 @@ function AccountLedger({ account, movements, costCenters, terceros, onRefresh }:
 }
 
 export default function MovimientosPage() {
+  const { isAdmin } = useAuth();
   const [loading, setLoading] = useState(true);
   const [companies, setCompanies] = useState<any[]>([]);
   const [accounts, setAccounts] = useState<any[]>([]);
@@ -968,7 +988,7 @@ export default function MovimientosPage() {
     while (hasMore) {
         const { data, error } = await supabase
           .from('movimientos')
-          .select('*, saldoo, cuentas_bancarias(id, banco, descripcion, moneda, empresa_id, empresas(codigo)), centros_costo(id, nombre), facturas(*)')
+          .select('*, saldoo, cuentas_bancarias(id, banco, descripcion, moneda, empresa_id, empresas(codigo)), centros_costo(id, nombre, numero), facturas(*)')
           .order('fecha', { ascending: false })
           .order('id', { ascending: true }) // Added stable sort tie-breaker
           .range(from, to);
@@ -1034,7 +1054,7 @@ export default function MovimientosPage() {
         Tercero: m.nombre_tercero,
         Concepto: m.concepto,
         Factura: m.factura || '',
-        Centro_Costo: m.centros_costo?.nombre || 'Gral'
+        Centro_Costo: m.centros_costo ? formatCostCenter(m.centros_costo) : 'Gral'
     }));
 
     const ws = XLSX.utils.json_to_sheet(dataToExport);
@@ -1094,44 +1114,48 @@ export default function MovimientosPage() {
                   })}
                 </select>
             </div>
-            <button 
+            <button
                 onClick={handleExport}
                 className="flex items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-5 py-3 text-sm font-bold text-zinc-700 hover:bg-zinc-50 dark:bg-zinc-900 dark:border-zinc-800 transition-all shadow-sm"
             >
                 <Download className="w-5 h-5" />
                 Exportar
             </button>
-            <button 
-                onClick={() => setShowForm(true)}
-                className="flex items-center gap-2 rounded-2xl bg-primary px-6 py-3 text-sm font-bold text-zinc-50 shadow-xl shadow-primary/20 hover:scale-[1.02] transition-all hover:opacity-90 active:scale-95"
-            >
-                <Plus className="w-5 h-5" />
-                Nueva Captura
-            </button>
-            <button 
-                onClick={async () => {
-                    setIsSyncing(true);
-                    try {
-                        const res = await fetch('/api/invoices/sync', { method: 'POST' });
-                        const data = await res.json();
-                        if (data.success) {
-                            alert(`Sincronización completada:\n- Sinc: ${data.sync}\n- Vínculos nuevos: ${data.matches.matched}\n- Sugerencias: ${data.matches.suggested}`);
-                            fetchData(true);
-                        } else {
-                            alert('Error: ' + data.error);
-                        }
-                    } catch (e: any) {
-                        alert('Error de red: ' + e.message);
-                    } finally {
-                        setIsSyncing(false);
-                    }
-                }}
-                disabled={isSyncing}
-                className={`flex items-center gap-2 rounded-2xl bg-emerald-500 px-6 py-3 text-sm font-bold text-zinc-50 shadow-xl shadow-emerald-500/20 hover:scale-[1.02] transition-all hover:opacity-90 active:scale-95 ${isSyncing ? "opacity-50 cursor-wait" : ""}`}
-            >
-                <RefreshCw className={`w-5 h-5 ${isSyncing ? "animate-spin" : ""}`} />
-                {isSyncing ? "Sincronizando..." : "Sincronizar Facturas"}
-            </button>
+            {isAdmin && (
+                <>
+                    <button
+                        onClick={() => setShowForm(true)}
+                        className="flex items-center gap-2 rounded-2xl bg-primary px-6 py-3 text-sm font-bold text-zinc-50 shadow-xl shadow-primary/20 hover:scale-[1.02] transition-all hover:opacity-90 active:scale-95"
+                    >
+                        <Plus className="w-5 h-5" />
+                        Nueva Captura
+                    </button>
+                    <button
+                        onClick={async () => {
+                            setIsSyncing(true);
+                            try {
+                                const res = await fetch('/api/invoices/sync', { method: 'POST' });
+                                const data = await res.json();
+                                if (data.success) {
+                                    alert(`Sincronización completada:\n- Sinc: ${data.sync}\n- Vínculos nuevos: ${data.matches.matched}\n- Sugerencias: ${data.matches.suggested}`);
+                                    fetchData(true);
+                                } else {
+                                    alert('Error: ' + data.error);
+                                }
+                            } catch (e: any) {
+                                alert('Error de red: ' + e.message);
+                            } finally {
+                                setIsSyncing(false);
+                            }
+                        }}
+                        disabled={isSyncing}
+                        className={`flex items-center gap-2 rounded-2xl bg-emerald-500 px-6 py-3 text-sm font-bold text-zinc-50 shadow-xl shadow-emerald-500/20 hover:scale-[1.02] transition-all hover:opacity-90 active:scale-95 ${isSyncing ? "opacity-50 cursor-wait" : ""}`}
+                    >
+                        <RefreshCw className={`w-5 h-5 ${isSyncing ? "animate-spin" : ""}`} />
+                        {isSyncing ? "Sincronizando..." : "Sincronizar Facturas"}
+                    </button>
+                </>
+            )}
         </div>
       </div>
 
@@ -1221,12 +1245,13 @@ export default function MovimientosPage() {
                                                         exit={{ height: 0, opacity: 0 }}
                                                         className="overflow-hidden"
                                                     >
-                                                        <AccountLedger 
-                                                            account={acc} 
-                                                            movements={accountMoves} 
-                                                            costCenters={costCenters} 
+                                                        <AccountLedger
+                                                            account={acc}
+                                                            movements={accountMoves}
+                                                            costCenters={costCenters}
                                                             terceros={terceros}
                                                             onRefresh={() => fetchData(true)}
+                                                            isAdmin={isAdmin}
                                                         />
                                                     </motion.div>
                                                 )}

@@ -28,6 +28,7 @@ import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { ManualLinkModal } from "@/components/ManualLinkModal";
 import { motion, AnimatePresence } from "framer-motion";
+import { useAuth } from "@/context/AuthContext";
 
 const safeFormatDate = (dateStr: string, formatPattern: string, options?: any) => {
     try {
@@ -41,6 +42,7 @@ const safeFormatDate = (dateStr: string, formatPattern: string, options?: any) =
 };
 
 export default function FacturasPage() {
+    const { isAdmin } = useAuth();
     const [loading, setLoading] = useState(true);
     const [facturas, setFacturas] = useState<any[]>([]);
     const [searchTerm, setSearchTerm] = useState("");
@@ -307,14 +309,16 @@ export default function FacturasPage() {
                     <h1 className="text-4xl font-black tracking-tight text-zinc-900 dark:text-zinc-50">Facturas Recibidas</h1>
                     <p className="text-zinc-500 mt-1 dark:text-zinc-300 font-medium italic">Archivo digital de comprobantes fiscales (XML) sincronizados desde el correo.</p>
                 </div>
-                <button 
-                    onClick={handleSync}
-                    disabled={isSyncing}
-                    className={`flex items-center gap-2 rounded-2xl bg-emerald-500 px-6 py-4 text-sm font-black text-zinc-50 shadow-xl shadow-emerald-500/20 hover:scale-[1.02] transition-all active:scale-95 disabled:opacity-50 ${isSyncing ? "cursor-not-allowed" : ""}`}
-                >
-                    <RefreshCw className={`w-5 h-5 ${isSyncing ? "animate-spin" : ""}`} />
-                    {isSyncing ? "Sincronizando..." : "Sincronizar Ahora"}
-                </button>
+                {isAdmin && (
+                    <button
+                        onClick={handleSync}
+                        disabled={isSyncing}
+                        className={`flex items-center gap-2 rounded-2xl bg-emerald-500 px-6 py-4 text-sm font-black text-zinc-50 shadow-xl shadow-emerald-500/20 hover:scale-[1.02] transition-all active:scale-95 disabled:opacity-50 ${isSyncing ? "cursor-not-allowed" : ""}`}
+                    >
+                        <RefreshCw className={`w-5 h-5 ${isSyncing ? "animate-spin" : ""}`} />
+                        {isSyncing ? "Sincronizando..." : "Sincronizar Ahora"}
+                    </button>
+                )}
             </div>
 
             {/* Stats Summary */}
@@ -505,7 +509,7 @@ export default function FacturasPage() {
                                     </td>
                                     <td className="px-6 py-5 text-right" onClick={(e) => e.stopPropagation()}>
                                         <div className="flex items-center justify-end gap-2">
-                                            {factura.estado !== 'VINCULADA' && factura.estado !== 'DESCARTADA' ? (
+                                            {!isAdmin ? null : factura.estado !== 'VINCULADA' && factura.estado !== 'DESCARTADA' ? (
                                                 <button 
                                                     onClick={() => setSelectedInvoice(factura)}
                                                     className={`p-2 rounded-xl transition-all flex items-center gap-1.5 text-[9px] font-black uppercase tracking-wider
@@ -746,49 +750,55 @@ export default function FacturasPage() {
                                                     </p>
                                                 </div>
                                             </div>
-                                            <button 
-                                                onClick={() => handleUnlink(detailInvoice)}
-                                                className="w-full py-2.5 bg-red-500 hover:bg-red-650 text-white rounded-xl text-xs font-black uppercase tracking-wider shadow-md shadow-red-500/15 flex items-center justify-center gap-2 transition-all active:scale-98"
-                                            >
-                                                <Unlink className="w-4 h-4" />
-                                                Desvincular Movimiento
-                                            </button>
+                                            {isAdmin && (
+                                                <button
+                                                    onClick={() => handleUnlink(detailInvoice)}
+                                                    className="w-full py-2.5 bg-red-500 hover:bg-red-650 text-white rounded-xl text-xs font-black uppercase tracking-wider shadow-md shadow-red-500/15 flex items-center justify-center gap-2 transition-all active:scale-98"
+                                                >
+                                                    <Unlink className="w-4 h-4" />
+                                                    Desvincular Movimiento
+                                                </button>
+                                            )}
                                         </div>
                                     ) : (
                                         <div className="p-4 rounded-2xl bg-zinc-100 dark:bg-zinc-950 border border-zinc-100 dark:border-zinc-900 space-y-4 text-center">
                                             {detailInvoice.estado === 'DESCARTADA' ? (
                                                 <>
                                                     <p className="text-xs text-zinc-500 italic">Esta factura está excluida y no forma parte del flujo de conciliación bancaria.</p>
-                                                    <button 
-                                                        onClick={() => handleRestoreInvoice(detailInvoice)}
-                                                        className="w-full py-2.5 bg-zinc-900 dark:bg-zinc-800 text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 transition-all active:scale-98"
-                                                    >
-                                                        <RotateCcw className="w-4 h-4" />
-                                                        Restaurar a Pendiente
-                                                    </button>
+                                                    {isAdmin && (
+                                                        <button
+                                                            onClick={() => handleRestoreInvoice(detailInvoice)}
+                                                            className="w-full py-2.5 bg-zinc-900 dark:bg-zinc-800 text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 transition-all active:scale-98"
+                                                        >
+                                                            <RotateCcw className="w-4 h-4" />
+                                                            Restaurar a Pendiente
+                                                        </button>
+                                                    )}
                                                 </>
                                             ) : (
                                                 <>
                                                     <p className="text-xs text-zinc-500 italic">Esta factura aún no se encuentra vinculada a ningún movimiento en tus cuentas de banco.</p>
-                                                    <div className="flex gap-2">
-                                                        <button 
-                                                            onClick={() => {
-                                                                setSelectedInvoice(detailInvoice);
-                                                                setDetailInvoice(null);
-                                                            }}
-                                                            className="flex-1 py-2.5 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 hover:opacity-90 rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 transition-all active:scale-98"
-                                                        >
-                                                            <LinkIcon className="w-4 h-4" />
-                                                            Vincular Ahora
-                                                        </button>
-                                                        <button 
-                                                            onClick={() => handleMarkAsDiscarded(detailInvoice)}
-                                                            className="px-3 py-2.5 border border-zinc-200 dark:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-250 rounded-xl text-xs font-black uppercase tracking-wider transition-colors"
-                                                            title="Descartar de la conciliación"
-                                                        >
-                                                            Excluir
-                                                        </button>
-                                                    </div>
+                                                    {isAdmin && (
+                                                        <div className="flex gap-2">
+                                                            <button
+                                                                onClick={() => {
+                                                                    setSelectedInvoice(detailInvoice);
+                                                                    setDetailInvoice(null);
+                                                                }}
+                                                                className="flex-1 py-2.5 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 hover:opacity-90 rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 transition-all active:scale-98"
+                                                            >
+                                                                <LinkIcon className="w-4 h-4" />
+                                                                Vincular Ahora
+                                                            </button>
+                                                            <button
+                                                                onClick={() => handleMarkAsDiscarded(detailInvoice)}
+                                                                className="px-3 py-2.5 border border-zinc-200 dark:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-250 rounded-xl text-xs font-black uppercase tracking-wider transition-colors"
+                                                                title="Descartar de la conciliación"
+                                                            >
+                                                                Excluir
+                                                            </button>
+                                                        </div>
+                                                    )}
                                                 </>
                                             )}
                                         </div>

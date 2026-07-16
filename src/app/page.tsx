@@ -15,6 +15,7 @@ import { supabase } from "@/lib/supabase";
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 import { NewMovementForm } from "@/components/NewMovementForm";
+import { useAuth } from "@/context/AuthContext";
 import { calculateAccountBalance, sortMovements } from "@/lib/balances";
 
 function cn(...inputs: ClassValue[]) {
@@ -22,6 +23,7 @@ function cn(...inputs: ClassValue[]) {
 }
 
 export default function Dashboard() {
+  const { isAdmin } = useAuth();
   const [loading, setLoading] = useState(true);
   const [companies, setCompanies] = useState<any[]>([]);
   const [accounts, setAccounts] = useState<any[]>([]);
@@ -161,16 +163,16 @@ export default function Dashboard() {
           >
             {isCaptureMode ? "Salir de Captura" : "Modo Captura"}
           </button>
-          {!isCaptureMode && (
+          {!isCaptureMode && isAdmin && (
             <>
-              <button 
+              <button
                 onClick={() => { setCaptureMode("import"); setShowCapture(true); }}
                 className="flex items-center gap-2 rounded-2xl bg-primary px-6 py-3 text-sm font-bold text-zinc-50 shadow-xl shadow-primary/20 hover:scale-[1.02] transition-all active:scale-95"
               >
                 <FileSpreadsheet className="w-5 h-5" />
                 Importar Excel Bancario
               </button>
-              <button 
+              <button
                 onClick={() => { setCaptureMode("manual"); setShowCapture(true); }}
                 className="flex items-center gap-2 rounded-2xl bg-zinc-100 dark:bg-zinc-800 px-6 py-3 text-sm font-bold text-zinc-900 dark:text-zinc-50 hover:bg-zinc-200 transition-all active:scale-95">
                 <Plus className="w-5 h-5" />

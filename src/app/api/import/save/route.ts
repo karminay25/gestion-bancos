@@ -1,10 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { createClient } from '@supabase/supabase-js';
 import crypto from 'crypto';
 import { cleanTerceroName } from '@/lib/nameCleaner';
 
+export const dynamic = 'force-dynamic';
+
+// Scoped to the caller's session so RLS (writes restricted to admin role)
+// applies here the same way it does for direct client-side inserts.
+function getScopedSupabase(req: NextRequest) {
+    const authHeader = req.headers.get('authorization') || undefined;
+    return createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        authHeader ? { global: { headers: { Authorization: authHeader } } } : undefined
+    );
+}
+
 export async function POST(req: NextRequest) {
     try {
+        const supabase = getScopedSupabase(req);
         const { movements, cuentaId, temporadaId, centroCostoId, suggestedBalance } = await req.json();
 
         if (!movements || !Array.isArray(movements) || !cuentaId) {

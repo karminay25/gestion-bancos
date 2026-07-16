@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useSidebar } from "@/context/SidebarContext";
+import { useAuth } from "@/context/AuthContext";
 import { 
   BarChart3, 
   Wallet, 
@@ -39,6 +40,7 @@ const navItems = [
 export function Sidebar() {
   const pathname = usePathname();
   const { isCollapsed, toggle } = useSidebar();
+  const { user, role, signOut } = useAuth();
 
   return (
     <div className={cn(
@@ -87,8 +89,20 @@ export function Sidebar() {
         })}
       </nav>
 
-      <div className="p-4 border-t border-zinc-200 dark:border-zinc-800">
-        <button className={cn(
+      <div className="p-4 border-t border-zinc-200 dark:border-zinc-800 space-y-2">
+        {!isCollapsed && user && (
+          <div className="px-3 pb-1">
+            <p className="text-xs font-bold text-zinc-700 dark:text-zinc-300 truncate">
+              {(user.user_metadata?.display_name as string) || user.email}
+            </p>
+            <p className="text-[10px] font-black uppercase tracking-widest text-primary">
+              {role === "admin" ? "Administrador" : "Solo lectura"}
+            </p>
+          </div>
+        )}
+        <button
+          onClick={signOut}
+          className={cn(
             "flex w-full items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-900 transition-colors",
             isCollapsed && "justify-center px-0"
         )}>

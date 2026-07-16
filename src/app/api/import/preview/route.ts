@@ -1,11 +1,44 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { createClient } from '@supabase/supabase-js';
 import { parseBBVA } from '@/lib/importers/bbva';
 import { parseMonex } from '@/lib/importers/monex';
 import { parseBajio } from '@/lib/importers/bajio';
 
+export const dynamic = 'force-dynamic';
+
+// Build a per-request client scoped to the caller's session so RLS policies
+// (which restrict writes to the admin role) apply the same way here as they
+// do for direct client-side calls. Without this, this route would act as an
+// anonymous request and get blocked (or bypass RLS entirely) regardless of
+// who is actually signed in.
+function getScopedSupabase(req: NextRequest) {
+    const authHeader = req.headers.get('authorization') || undefined;
+    return createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        authHeader ? { global: { headers: { Authorization: authHeader } } } : undefined
+    );
+}
+
+// Supabase queries occasionally fail with a transient "fetch failed" network
+// error (seen locally, but network blips can happen in production too).
+// Retry those a couple of times with a short backoff before giving up.
+async function withRetry<T>(fn: () => PromiseLike<{ data: T; error: any }>, attempts = 3): Promise<{ data: T; error: any }> {
+    let last: { data: T; error: any } = { data: null as any, error: null };
+    for (let i = 0; i < attempts; i++) {
+        last = await fn();
+        if (!last.error) return last;
+        const msg = String(last.error?.message || '');
+        const isTransient = /fetch failed|network|ECONNRESET|ETIMEDOUT|socket/i.test(msg);
+        if (!isTransient) return last;
+        if (i < attempts - 1) await new Promise(r => setTimeout(r, 400 * (i + 1)));
+    }
+    return last;
+}
+
 export async function POST(req: NextRequest) {
     try {
+        const supabase = getScopedSupabase(req);
         const formData = await req.formData();
         const file = formData.get('file') as File;
         const cuentaId = formData.get('cuentaId') as string;
@@ -53,7 +86,16 @@ export async function POST(req: NextRequest) {
         }
 
         // Fetch centros de costo for auto-classification
-        const { data: centrosCosto } = await supabase.from('centros_costo').select('id, nombre');
+        console.time('[Preview] centros_costo fetch');
+        const { data: centrosCosto } = await withRetry(() => supabase.from('centros_costo').select('id, nombre'));
+        console.timeEnd('[Preview] centros_costo fetch');
+
+        // Keyword-based rules, checked before the generic name-matching loop.
+        // These take priority regardless of how the cost center itself is named.
+        const PRIORITY_CC_RULES: { keywords: string[]; ccName: string }[] = [
+            { keywords: ['GASOLINA', 'COMBUSTIBLE'], ccName: 'GASOLINA' },
+            { keywords: ['TRASPASO'], ccName: 'TRASPASO' },
+        ];
 
         // Use the selected account for ALL movements
         // (user explicitly selects which account they're importing into)
@@ -78,9 +120,27 @@ export async function POST(req: NextRequest) {
 
             let conceptoNormal = removeAccents(conceptoUpper);
             let refNormal = removeAccents((m.referencia || '').toUpperCase());
+            let nombreNormal = removeAccents((m.proveedor || m.descripcion || '').toUpperCase());
 
             // Auto-detect Centro de Costo
             if (centrosCosto) {
+                // Priority keyword rules (gasolina/combustible, traspaso, etc.)
+                for (const rule of PRIORITY_CC_RULES) {
+                    const matches = rule.keywords.some(kw =>
+                        conceptoNormal.includes(kw) || refNormal.includes(kw) || nombreNormal.includes(kw)
+                    );
+                    if (matches) {
+                        const cc = centrosCosto.find(c => removeAccents(c.nombre.toUpperCase()) === rule.ccName);
+                        if (cc) {
+                            centro_costo_id = cc.id;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            // Fallback: generic match against every cost center's own name
+            if (centrosCosto && !centro_costo_id) {
                 // We order CCs by length descending to match more specific names first
                 const sortedCCs = [...centrosCosto].sort((a, b) => b.nombre.length - a.nombre.length);
                 
@@ -118,45 +178,63 @@ export async function POST(req: NextRequest) {
             };
         });
 
-        // DEDUPLICATION LOGIC PER ACCOUNT (Multi-stage fallback)
-        const finalMovements = await Promise.all(movementsWithAccounts.map(async (m) => {
-            // Stage 1: Try exact match including balance fingerprint
-            let query = supabase
-                .from('movimientos')
-                .select('id')
-                .eq('cuenta_id', m.targetAccountId)
-                .eq('fecha', m.fecha)
-                .eq('tipo', m.tipo)
-                .eq('monto', m.monto);
+        // DEDUPLICATION LOGIC PER ACCOUNT
+        // Previously this fired one (or two) Supabase requests PER movement via
+        // Promise.all — for a 130-row file that's 260+ simultaneous requests,
+        // which overwhelmed the connection and caused silent "fetch failed"
+        // errors (isDuplicate ended up null instead of true/false, so duplicates
+        // were never actually detected). It was also extremely slow even when
+        // throttled (minutes for a single file), risking a timeout in production.
+        // A movement only ever needs to match an existing one on cuenta + fecha +
+        // tipo + monto (the old "balance fingerprint" stage never added real
+        // selectivity — its broader fallback stage already covered the same
+        // cases), so we fetch the account's existing movements ONCE and compare
+        // in memory instead.
+        // Supabase/PostgREST caps a single request at 1000 rows, and accounts can
+        // easily hold several thousand movements, so this has to be paged.
+        // NOTE: intentionally uses id-keyset pagination (.gt('id', cursor)) rather
+        // than .range() — .range() sends an HTTP "Range" header which the Next.js
+        // dev server's fetch instrumentation fails to parse in this project
+        // ("invalid type: unit value, expected usize"), crashing the route.
+        const existingMovements: { id: string; fecha: string; tipo: string; monto: number }[] = [];
+        {
+            const PAGE_SIZE = 1000;
+            let cursor: string | null = null;
+            while (true) {
+                const cursorForPage = cursor;
+                console.time(`[Preview] existingMovements page cursor=${cursorForPage}`);
+                const { data: page, error: pageError } = await withRetry(() => {
+                    let pageQuery = supabase
+                        .from('movimientos')
+                        .select('id, fecha, tipo, monto')
+                        .eq('cuenta_id', cuentaId)
+                        .order('id', { ascending: true })
+                        .limit(PAGE_SIZE);
+                    if (cursorForPage) pageQuery = pageQuery.gt('id', cursorForPage);
+                    return pageQuery;
+                });
+                console.timeEnd(`[Preview] existingMovements page cursor=${cursorForPage}`);
 
-            if (m.saldo_excel != null) {
-                const balanceTag = `[BANCO: ${parseFloat(m.saldo_excel).toFixed(2)}]`;
-                query.ilike('factura', `%${balanceTag}%`);
-            } else {
-                query.ilike('concepto', `%${m.concepto.substring(0, 15)}%`);
+                if (pageError) {
+                    throw new Error(`No se pudo verificar duplicados: ${pageError.message}`);
+                }
+                if (!page || page.length === 0) break;
+                existingMovements.push(...page);
+                if (page.length < PAGE_SIZE) break;
+                cursor = page[page.length - 1].id;
             }
+        }
 
-            let { data: existing } = await query.limit(1);
+        const dupKey = (fecha: string, tipo: string, monto: number | string) =>
+            `${fecha}|${tipo}|${Number(monto).toFixed(2)}`;
 
-            // Stage 2: AGGRESSIVE FALLBACK
-            // If Stage 1 (Balance/Concept) failed, try matching ONLY by Date + Amount
-            // This is necessary because old records might have very different concepts (e.g. "TRASPASO" vs "Detailed Bank Desc")
-            if (!existing || existing.length === 0) {
-                const { data: globalMatch } = await supabase
-                    .from('movimientos')
-                    .select('id')
-                    .eq('cuenta_id', m.targetAccountId)
-                    .eq('fecha', m.fecha)
-                    .eq('tipo', m.tipo)
-                    .eq('monto', m.monto)
-                    .limit(1);
-                existing = globalMatch;
-            }
+        const existingKeys = new Set(
+            (existingMovements || []).map(e => dupKey(e.fecha, e.tipo, e.monto))
+        );
 
-            return {
-                ...m,
-                isDuplicate: (existing && existing.length > 0)
-            };
+        const finalMovements = movementsWithAccounts.map(m => ({
+            ...m,
+            isDuplicate: existingKeys.has(dupKey(m.fecha, m.tipo, m.monto))
         }));
 
         // Reverse to get Oldest First (BBVA comes newest-first; Monex and Bajio already oldest-first)

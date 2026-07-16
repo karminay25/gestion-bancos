@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import { Sidebar } from "@/components/Sidebar";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -20,6 +19,8 @@ export const metadata: Metadata = {
 
 import { SidebarProvider, useSidebar } from "@/context/SidebarContext";
 import { Toaster } from "react-hot-toast";
+import { AuthProvider } from "@/context/AuthContext";
+import { AppShell } from "@/components/AppShell";
 
 export default function RootLayout({
   children,
@@ -32,20 +33,11 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full bg-zinc-50 dark:bg-zinc-950">
-        <SidebarProvider>
-          <div className="flex h-screen overflow-hidden">
-            <SidebarPrv />
-            <main className="flex-1 overflow-y-auto p-8 relative">
-              {children}
-            </main>
-          </div>
-        </SidebarProvider>
+        <AuthProvider>
+          <AppShell>{children}</AppShell>
+        </AuthProvider>
         <Toaster position="bottom-right" />
       </body>
     </html>
   );
-}
-
-function SidebarPrv() {
-    return <Sidebar />;
 }

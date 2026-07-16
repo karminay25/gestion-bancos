@@ -4,8 +4,10 @@ import { useEffect, useState } from "react";
 import { Leaf, Plus, Play, Square, CalendarDays, Loader2, X, AlertCircle } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/context/AuthContext";
 
 export default function TemporadasPage() {
+  const { isAdmin } = useAuth();
   const [temporadas, setTemporadas] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -95,13 +97,15 @@ export default function TemporadasPage() {
           <h1 className="text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">Temporadas</h1>
           <p className="text-zinc-500 mt-1 dark:text-zinc-400">Gestión de periodos de operación y análisis.</p>
         </div>
-        <button 
-          onClick={() => setShowNewModal(true)}
-          className="flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-zinc-50 shadow-lg shadow-primary/20 hover:opacity-90 transition-all"
-        >
-          <Plus className="w-5 h-5" />
-          Nueva Temporada
-        </button>
+        {isAdmin && (
+          <button
+            onClick={() => setShowNewModal(true)}
+            className="flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-zinc-50 shadow-lg shadow-primary/20 hover:opacity-90 transition-all"
+          >
+            <Plus className="w-5 h-5" />
+            Nueva Temporada
+          </button>
+        )}
       </div>
 
       {loading ? (
@@ -150,12 +154,15 @@ export default function TemporadasPage() {
                         </div>
 
                         <div className="mt-8">
-                            {status.status === 'programada' && (
+                            {!isAdmin && (status.status === 'programada' || status.status === 'activa') && (
+                                <p className="text-center text-[10px] font-black uppercase text-zinc-300">Solo lectura</p>
+                            )}
+                            {isAdmin && status.status === 'programada' && (
                                 <button onClick={() => { setActionDate(new Date().toISOString().split('T')[0]); setActionModal({ type: 'iniciar', temporada: t }); }} className="w-full py-3 flex items-center justify-center gap-2 rounded-2xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500 hover:text-white text-sm font-bold transition-all">
                                     <Play className="w-4 h-4" /> Iniciar Temporada
                                 </button>
                             )}
-                            {status.status === 'activa' && (
+                            {isAdmin && status.status === 'activa' && (
                                 <button onClick={() => { setActionDate(new Date().toISOString().split('T')[0]); setActionModal({ type: 'finalizar', temporada: t }); }} className="w-full py-3 flex items-center justify-center gap-2 rounded-2xl bg-rose-500/10 text-rose-600 dark:text-rose-400 hover:bg-rose-500 hover:text-white text-sm font-bold transition-all">
                                     <Square className="w-4 h-4" /> Finalizar Temporada
                                 </button>

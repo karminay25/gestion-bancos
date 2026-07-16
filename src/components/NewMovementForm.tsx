@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "@/lib/supabase";
+import { formatCostCenter } from "@/lib/costCenter";
 
 const ARCHIVED_COST_CENTERS = new Set([
   'ACTIVO LOLA',
@@ -303,7 +304,12 @@ export function NewMovementForm({ onClose, onSuccess, initialTab = "manual" }: N
     formData.append('cuentaId', currentAccount.id);
 
     try {
-        const res = await fetch('/api/import/preview', { method: 'POST', body: formData });
+        const { data: { session } } = await supabase.auth.getSession();
+        const res = await fetch('/api/import/preview', {
+            method: 'POST',
+            headers: session ? { Authorization: `Bearer ${session.access_token}` } : undefined,
+            body: formData
+        });
         const data = await res.json();
         if (data.error) throw new Error(data.error);
 
@@ -326,10 +332,14 @@ export function NewMovementForm({ onClose, onSuccess, initialTab = "manual" }: N
     const movementsToSave = previewData.filter((_, idx) => selectedMoves.has(idx));
 
     try {
+        const { data: { session } } = await supabase.auth.getSession();
         const res = await fetch('/api/import/save', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
+            headers: {
+                'Content-Type': 'application/json',
+                ...(session ? { Authorization: `Bearer ${session.access_token}` } : {})
+            },
+            body: JSON.stringify({
                 movements: movementsToSave, 
                 cuentaId: currentAccount.id,
                 temporadaId: globalSeasonId || null,
@@ -453,7 +463,7 @@ export function NewMovementForm({ onClose, onSuccess, initialTab = "manual" }: N
                         <div className="flex gap-2">
                             <select value={globalCCId} onChange={e => setGlobalCCId(e.target.value)} className="select-custom-dark flex-1" style={{ color: 'white' }}>
                                 <option value="" style={{ color: 'white' }}>Gral / Sin Clasificar</option>
-                                {costCenters.filter(cc => !ARCHIVED_COST_CENTERS.has(cc.nombre.toUpperCase().trim())).map(cc => <option key={cc.id} value={cc.id} style={{ color: 'white' }}>{cc.nombre}</option>)}
+                                {costCenters.filter(cc => !ARCHIVED_COST_CENTERS.has(cc.nombre.toUpperCase().trim())).map(cc => <option key={cc.id} value={cc.id} style={{ color: 'white' }}>{formatCostCenter(cc)}</option>)}
                             </select>
                             <button
                                 type="button"
@@ -597,7 +607,7 @@ export function NewMovementForm({ onClose, onSuccess, initialTab = "manual" }: N
                                           )}
                                         </div>
                                         {t.centros_costo && (
-                                          <span className="text-[9px] font-black uppercase bg-primary/20 text-primary px-2 py-0.5 rounded-full ml-2 whitespace-nowrap">{t.centros_costo.nombre}</span>
+                                          <span className="text-[9px] font-black uppercase bg-primary/20 text-primary px-2 py-0.5 rounded-full ml-2 whitespace-nowrap">{formatCostCenter(t.centros_costo)}</span>
                                         )}
                                       </button>
                                     ))}
@@ -631,8 +641,8 @@ export function NewMovementForm({ onClose, onSuccess, initialTab = "manual" }: N
                         <div className="grid grid-cols-2 gap-4">
                             <FormField label="Monto">
                                 <div className="relative">
-                                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500 font-bold">$</span>
-                                    <input type="number" step="0.01" value={formData.monto} onChange={e => setFormData({...formData, monto: e.target.value})} className="input-custom-dark pl-8 text-lg font-black" required />
+                                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500 font-bold pointer-events-none">$</span>
+                                    <input type="number" step="0.01" value={formData.monto} onChange={e => setFormData({...formData, monto: e.target.value})} className="input-custom-dark text-lg font-black" style={{ paddingLeft: '2.25rem' }} required />
                                 </div>
                             </FormField>
                             <FormField label="Factura">
@@ -713,7 +723,7 @@ export function NewMovementForm({ onClose, onSuccess, initialTab = "manual" }: N
                                                                 className="input-custom-dark !p-2 !text-[11px] !rounded-lg"
                                                             >
                                                                 <option value="">-- Sin C.C. --</option>
-                                                                {costCenters.map(cc => <option key={cc.id} value={cc.id}>{cc.nombre}</option>)}
+                                                                {costCenters.map(cc => <option key={cc.id} value={cc.id}>{formatCostCenter(cc)}</option>)}
                                                             </select>
                                                         </div>
                                                     </td>
