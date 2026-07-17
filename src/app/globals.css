@@ -9,6 +9,32 @@
   --font-mono: var(--font-geist-mono);
 }
 
+/* Registrar los colores semánticos como colores de Tailwind. Sin esto, utilidades
+   como bg-primary / text-primary / border-primary NO se generan en Tailwind v4 y
+   quedan sin efecto (fondo transparente). Con @theme inline la utilidad referencia
+   la variable en tiempo real, así el color cambia junto con el tema claro/oscuro. */
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+}
+
 :root {
   color-scheme: light;
   --background: oklch(0.98 0.01 250);
