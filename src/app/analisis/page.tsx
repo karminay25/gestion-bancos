@@ -86,7 +86,7 @@ export default function AnalisisPage() {
       const [compRes, seasRes, ccRes] = await Promise.all([
         supabase.from('empresas').select('*'),
         supabase.from('temporadas').select('*').order('created_at', { ascending: false }),
-        supabase.from('centros_costo').select('*').order('nombre')
+        supabase.from('centros_costo').select('*').order('numero', { ascending: true, nullsFirst: false }).order('nombre')
       ]);
 
       if (compRes.data) setCompanies(compRes.data);

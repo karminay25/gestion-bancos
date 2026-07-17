@@ -968,7 +968,7 @@ export default function MovimientosPage() {
     const [compRes, accRes, ccRes, seasRes, tercRes] = await Promise.all([
       supabase.from('empresas').select('*'),
       supabase.from('cuentas_bancarias').select('*, empresas(*)'),
-      supabase.from('centros_costo').select('*').order('nombre'),
+      supabase.from('centros_costo').select('*').order('numero', { ascending: true, nullsFirst: false }).order('nombre'),
       supabase.from('temporadas').select('*').order('created_at', { ascending: false }),
       supabase.from('terceros').select('*')
     ]);

@@ -75,7 +75,7 @@ export default function TercerosPage() {
     setError(null);
     const [{ data: t, error: te }, { data: cc }, { data: empRes }, movRes] = await Promise.all([
       supabase.from('terceros').select('*, centros_costo(id, nombre, numero), empresas(id, codigo, nombre_completo)').order('nombre_canonico'),
-      supabase.from('centros_costo').select('*').order('nombre'),
+      supabase.from('centros_costo').select('*').order('numero', { ascending: true, nullsFirst: false }).order('nombre'),
       supabase.from('empresas').select('*'),
       supabase.from('movimientos').select('nombre_tercero, monto, tipo')
     ]);

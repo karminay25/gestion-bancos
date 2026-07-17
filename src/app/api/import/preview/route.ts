@@ -92,10 +92,31 @@ export async function POST(req: NextRequest) {
 
         // Keyword-based rules, checked before the generic name-matching loop.
         // These take priority regardless of how the cost center itself is named.
+        // Se evalúan en orden; gana la primera regla que coincida.
         const PRIORITY_CC_RULES: { keywords: string[]; ccName: string }[] = [
-            { keywords: ['GASOLINA', 'COMBUSTIBLE'], ccName: 'GASOLINA' },
+            { keywords: ['TIP AUTO', 'ABC LEASING'], ccName: 'SOCIO CARLOS' },
+            { keywords: ['GASOLINA', 'COMBUSTIBLE', 'ECO ESTACION', 'DIESEL'], ccName: 'GASOLINA' },
+            { keywords: ['IMSS', 'SAT', 'FINANZAS DEL ESTADO'], ccName: 'IMPUESTOS' },
+            { keywords: ['TARJETA'], ccName: 'CAJA CHICA / TARJETAS' },
+            { keywords: ['CFE'], ccName: 'LUZ' },
+            { keywords: ['DISPERSION'], ccName: 'NOMINA' },
+            { keywords: ['RADIO MOVIL DIPSA'], ccName: 'PRORRATEO' },
             { keywords: ['TRASPASO'], ccName: 'TRASPASO' },
         ];
+
+        // Coincidencia de palabra clave sobre el texto ya normalizado (mayúsculas, sin acentos).
+        // Palabras cortas y riesgosas (<=4 letras: SAT, CFE, IMSS) exigen coincidencia de
+        // palabra COMPLETA con \b, para que "SAT" no dispare dentro de "SATURNO".
+        // Las más largas usan coincidencia parcial (así "TARJETA" atrapa "TARJETAS" y
+        // "DIESEL" atrapa "BIODIESEL").
+        const escapeRegExpKw = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const keywordMatches = (kw: string, ...texts: string[]) => {
+            if (kw.replace(/\s/g, '').length <= 4) {
+                const re = new RegExp(`\\b${escapeRegExpKw(kw)}\\b`);
+                return texts.some(t => re.test(t));
+            }
+            return texts.some(t => t.includes(kw));
+        };
 
         // Use the selected account for ALL movements
         // (user explicitly selects which account they're importing into)
@@ -127,7 +148,7 @@ export async function POST(req: NextRequest) {
                 // Priority keyword rules (gasolina/combustible, traspaso, etc.)
                 for (const rule of PRIORITY_CC_RULES) {
                     const matches = rule.keywords.some(kw =>
-                        conceptoNormal.includes(kw) || refNormal.includes(kw) || nombreNormal.includes(kw)
+                        keywordMatches(kw, conceptoNormal, refNormal, nombreNormal)
                     );
                     if (matches) {
                         const cc = centrosCosto.find(c => removeAccents(c.nombre.toUpperCase()) === rule.ccName);

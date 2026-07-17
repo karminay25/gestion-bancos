@@ -17,9 +17,9 @@ export const metadata: Metadata = {
   description: "Gestión financiera para Lola, Bosbes y Oba",
 };
 
-import { SidebarProvider, useSidebar } from "@/context/SidebarContext";
 import { Toaster } from "react-hot-toast";
 import { AuthProvider } from "@/context/AuthContext";
+import { ThemeProvider, themeNoFlashScript } from "@/context/ThemeContext";
 import { AppShell } from "@/components/AppShell";
 
 export default function RootLayout({
@@ -32,10 +32,15 @@ export default function RootLayout({
       lang="es"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeNoFlashScript }} />
+      </head>
       <body className="min-h-full bg-zinc-50 dark:bg-zinc-950">
-        <AuthProvider>
-          <AppShell>{children}</AppShell>
-        </AuthProvider>
+        <ThemeProvider>
+          <AuthProvider>
+            <AppShell>{children}</AppShell>
+          </AuthProvider>
+        </ThemeProvider>
         <Toaster position="bottom-right" />
       </body>
     </html>

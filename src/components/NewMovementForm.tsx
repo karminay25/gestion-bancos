@@ -22,7 +22,7 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "@/lib/supabase";
-import { formatCostCenter } from "@/lib/costCenter";
+import { formatCostCenter, compareCostCenters } from "@/lib/costCenter";
 
 const ARCHIVED_COST_CENTERS = new Set([
   'ACTIVO LOLA',
@@ -123,7 +123,7 @@ export function NewMovementForm({ onClose, onSuccess, initialTab = "manual" }: N
         alert('Error al guardar: ' + error.message);
       } else if (data && data.length > 0) {
         const newCC = data[0];
-        setCostCenters(prev => [...prev, newCC].sort((a, b) => a.nombre.localeCompare(b.nombre)));
+        setCostCenters(prev => [...prev, newCC].sort(compareCostCenters));
         setGlobalCCId(newCC.id);
         setNewCCName('');
         setShowAddCC(false);
@@ -175,7 +175,7 @@ export function NewMovementForm({ onClose, onSuccess, initialTab = "manual" }: N
         supabase.from('empresas').select('*'),
         supabase.from('cuentas_bancarias').select('*'),
         supabase.from('temporadas').select('*'),
-        supabase.from('centros_costo').select('*'),
+        supabase.from('centros_costo').select('*').order('numero', { ascending: true, nullsFirst: false }).order('nombre'),
         supabase.from('terceros').select('*, centros_costo(id, nombre)').order('nombre_canonico'),
       ]);
 

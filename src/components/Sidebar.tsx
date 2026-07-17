@@ -4,20 +4,23 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useSidebar } from "@/context/SidebarContext";
 import { useAuth } from "@/context/AuthContext";
-import { 
-  BarChart3, 
-  Wallet, 
-  Leaf, 
-  Building2, 
-  History, 
-  Settings, 
+import { useTheme } from "@/context/ThemeContext";
+import {
+  BarChart3,
+  Wallet,
+  Leaf,
+  Building2,
+  History,
+  Settings,
   LayoutDashboard,
   LogOut,
   ChevronLeft,
   ChevronRight,
   Menu,
   BookUser,
-  FileText
+  FileText,
+  Sun,
+  Moon
 } from "lucide-react";
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
@@ -41,6 +44,7 @@ export function Sidebar() {
   const pathname = usePathname();
   const { isCollapsed, toggle } = useSidebar();
   const { user, role, signOut } = useAuth();
+  const { theme, toggleTheme } = useTheme();
 
   return (
     <div className={cn(
@@ -100,6 +104,18 @@ export function Sidebar() {
             </p>
           </div>
         )}
+        <button
+          onClick={toggleTheme}
+          title={theme === "dark" ? "Cambiar a tema claro" : "Cambiar a tema oscuro"}
+          className={cn(
+            "flex w-full items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-900 transition-colors",
+            isCollapsed && "justify-center px-0"
+        )}>
+          {theme === "dark"
+            ? <Sun className="w-5 h-5 text-amber-500" />
+            : <Moon className="w-5 h-5 text-zinc-500" />}
+          {!isCollapsed && <span className="whitespace-nowrap">{theme === "dark" ? "Tema Claro" : "Tema Oscuro"}</span>}
+        </button>
         <button
           onClick={signOut}
           className={cn(

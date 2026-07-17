@@ -1,11 +1,16 @@
 @import "tailwindcss";
 
+/* Hacer que las utilidades dark: respondan a la clase .dark (toggle manual)
+   en lugar de la preferencia del sistema operativo. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme {
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
 :root {
+  color-scheme: light;
   --background: oklch(0.98 0.01 250);
   --foreground: oklch(0.15 0.02 250);
   --card: oklch(1 0 0);
@@ -29,6 +34,7 @@
 }
 
 .dark {
+  color-scheme: dark;
   --background: oklch(0.1 0.02 250);
   --foreground: oklch(0.98 0.01 250);
   --card: oklch(0.15 0.03 250);
@@ -59,6 +65,15 @@
     color: var(--foreground);
     @apply font-sans antialiased;
   }
+}
+
+/* Contraste en tema CLARO: los grises muy claros usados para texto secundario
+   (zinc-300 / zinc-400) casi no se leen sobre fondo blanco. Aquí los oscurecemos
+   a un gris legible SOLO en tema claro. El selector :root:not(.dark) tiene mayor
+   especificidad que la utilidad de Tailwind, así que gana; en tema oscuro no aplica. */
+:root:not(.dark) .text-zinc-400,
+:root:not(.dark) .text-zinc-300 {
+  color: oklch(0.44 0.01 285);
 }
 
 .glass {
