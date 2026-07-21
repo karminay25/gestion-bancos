@@ -366,11 +366,11 @@ export function NewMovementForm({ onClose, onSuccess, initialTab = "manual" }: N
   return (
     <motion.div 
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 flex items-center justify-end bg-black/60 backdrop-blur-md p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md p-4"
     >
-      <motion.div 
-        initial={{ x: 600 }} animate={{ x: 0 }} exit={{ x: 600 }}
-        className="w-full max-w-4xl h-full bg-zinc-900 rounded-[2.5rem] shadow-[0_0_100px_-20px_rgba(0,0,0,0.5)] flex flex-col overflow-hidden border border-white/10"
+      <motion.div
+        initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 30 }}
+        className="w-full h-full bg-zinc-900 rounded-[2.5rem] shadow-[0_0_100px_-20px_rgba(0,0,0,0.5)] flex flex-col overflow-hidden border border-white/10"
       >
         <div className="p-8 border-b border-white/10 flex flex-col gap-6 bg-zinc-900/60 backdrop-blur-xl">
            <div className="flex items-center justify-between">
