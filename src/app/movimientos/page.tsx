@@ -733,7 +733,7 @@ function AccountLedger({ account, movements, costCenters, terceros, onRefresh, i
                                                 handleConceptoUpdate(move.id, e.target.value);
                                             }
                                         }}
-                                        className={`w-full bg-transparent border-none focus:ring-1 focus:ring-primary/20 rounded-lg text-[10px] text-zinc-500 dark:text-zinc-300 transition-all resize-none overflow-hidden hover:overflow-y-auto max-h-20 ${isUpdating === move.id ? "opacity-50" : isAdmin ? "hover:bg-zinc-100 dark:hover:bg-zinc-800" : ""}`}
+                                        className={`w-full bg-transparent border-none focus:ring-1 focus:ring-primary/20 rounded-lg text-[10px] text-black dark:text-zinc-50 transition-all resize-none overflow-hidden hover:overflow-y-auto max-h-20 ${isUpdating === move.id ? "opacity-50" : isAdmin ? "hover:bg-zinc-100 dark:hover:bg-zinc-800" : ""}`}
                                         onInput={(e) => {
                                             const target = e.target as HTMLTextAreaElement;
                                             target.style.height = 'auto';
