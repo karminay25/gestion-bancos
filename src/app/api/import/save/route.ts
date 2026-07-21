@@ -73,7 +73,13 @@ export async function POST(req: NextRequest) {
                 id: crypto.randomUUID(),
                 cuenta_id: cuentaId, 
                 fecha: m.fecha,
-                nombre_tercero: cleanTerceroName(m.descripcion || m.concepto),
+                // Si el usuario editó manualmente el beneficiario en la vista previa,
+                // se respeta tal cual lo escribió (sin pasarlo por el limpiador
+                // automático, que podría recortar o alterar el texto). Si no lo tocó,
+                // se deriva/limpia automáticamente como antes.
+                nombre_tercero: m._descripcionEdited
+                    ? ((m.descripcion || '').trim() || 'POR IDENTIFICAR')
+                    : cleanTerceroName(m.descripcion || m.concepto),
                 concepto: m.concepto,
                 monto: m.monto,
                 tipo: m.tipo,

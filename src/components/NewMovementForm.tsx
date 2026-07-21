@@ -370,7 +370,7 @@ export function NewMovementForm({ onClose, onSuccess, initialTab = "manual" }: N
     >
       <motion.div 
         initial={{ x: 600 }} animate={{ x: 0 }} exit={{ x: 600 }}
-        className="w-full max-w-2xl h-full bg-zinc-900 rounded-[2.5rem] shadow-[0_0_100px_-20px_rgba(0,0,0,0.5)] flex flex-col overflow-hidden border border-white/10"
+        className="w-full max-w-4xl h-full bg-zinc-900 rounded-[2.5rem] shadow-[0_0_100px_-20px_rgba(0,0,0,0.5)] flex flex-col overflow-hidden border border-white/10"
       >
         <div className="p-8 border-b border-white/10 flex flex-col gap-6 bg-zinc-900/60 backdrop-blur-xl">
            <div className="flex items-center justify-between">
@@ -463,7 +463,7 @@ export function NewMovementForm({ onClose, onSuccess, initialTab = "manual" }: N
                         <div className="flex gap-2">
                             <select value={globalCCId} onChange={e => setGlobalCCId(e.target.value)} className="select-custom-dark flex-1" style={{ color: 'white' }}>
                                 <option value="" style={{ color: 'white' }}>Gral / Sin Clasificar</option>
-                                {costCenters.filter(cc => !ARCHIVED_COST_CENTERS.has(cc.nombre.toUpperCase().trim())).map(cc => <option key={cc.id} value={cc.id} style={{ color: 'white' }}>{formatCostCenter(cc)}</option>)}
+                                {costCenters.filter(cc => cc.numero != null || !ARCHIVED_COST_CENTERS.has(cc.nombre.toUpperCase().trim())).map(cc => <option key={cc.id} value={cc.id} style={{ color: 'white' }}>{formatCostCenter(cc)}</option>)}
                             </select>
                             <button
                                 type="button"
@@ -686,14 +686,40 @@ export function NewMovementForm({ onClose, onSuccess, initialTab = "manual" }: N
                                 <div className="max-h-[350px] overflow-y-auto rounded-[2rem] border border-white/5 bg-zinc-900/20">
                                     <table className="w-full text-left text-xs">
                                         <thead className="sticky top-0 bg-zinc-900 text-zinc-400 font-bold uppercase tracking-widest border-b border-white/5 z-10">
-                                            <tr><th className="p-4 w-10"></th><th className="p-4">Fecha</th><th className="p-4">Descripción</th><th className="p-4">Clasificación</th><th className="p-4 text-right">Monto</th></tr>
+                                            <tr><th className="p-4 w-10"></th><th className="p-4">Fecha</th><th className="p-4">Beneficiario / Concepto</th><th className="p-4">Clasificación</th><th className="p-4 text-right">Monto</th></tr>
                                         </thead>
                                         <tbody className="divide-y divide-white/5">
                                             {previewData.map((m, idx) => (
                                                 <tr key={idx} className={`transition-colors ${m.isDuplicate ? "opacity-30 grayscale" : "hover:bg-white/5"}`}>
                                                     <td className="p-4"><input type="checkbox" checked={selectedMoves.has(idx)} onChange={() => { const n = new Set(selectedMoves); if (n.has(idx)) n.delete(idx); else n.add(idx); setSelectedMoves(n); }} className="w-4 h-4 accent-primary" /></td>
                                                     <td className="p-4 font-bold text-zinc-200 whitespace-nowrap">{m.fecha.split('-').reverse().join('/')}</td>
-                                                    <td className="p-4"><p className="font-bold text-white truncate max-w-[200px]">{m.concepto}</p>{m.isDuplicate && <span className="text-[9px] font-black text-amber-500 uppercase tracking-tighter flex items-center gap-1 mt-1"><ShieldAlert className="w-2.5 h-2.5" /> Duplicado</span>}</td>
+                                                    <td className="p-4">
+                                                        <div className="flex flex-col gap-1.5 min-w-[220px]">
+                                                            <input
+                                                                type="text"
+                                                                value={m.descripcion ?? ''}
+                                                                onChange={(e) => {
+                                                                    const next = [...previewData];
+                                                                    next[idx] = { ...next[idx], descripcion: e.target.value, _descripcionEdited: true };
+                                                                    setPreviewData(next);
+                                                                }}
+                                                                placeholder="Beneficiario / Tercero"
+                                                                className="input-custom-dark !p-2 !text-[11px] !rounded-lg font-bold"
+                                                            />
+                                                            <input
+                                                                type="text"
+                                                                value={m.concepto ?? ''}
+                                                                onChange={(e) => {
+                                                                    const next = [...previewData];
+                                                                    next[idx] = { ...next[idx], concepto: e.target.value };
+                                                                    setPreviewData(next);
+                                                                }}
+                                                                placeholder="Concepto (opcional)"
+                                                                className="input-custom-dark !p-2 !text-[11px] !rounded-lg"
+                                                            />
+                                                            {m.isDuplicate && <span className="text-[9px] font-black text-amber-500 uppercase tracking-tighter flex items-center gap-1 mt-0.5"><ShieldAlert className="w-2.5 h-2.5" /> Duplicado</span>}
+                                                        </div>
+                                                    </td>
                                                     <td className="p-4">
                                                         <div className="flex flex-col gap-1.5 min-w-[120px]">
                                                             <select 
