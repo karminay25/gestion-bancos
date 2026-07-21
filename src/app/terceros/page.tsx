@@ -236,7 +236,7 @@ export default function TercerosPage() {
           >
             <option value="">Todos los Centros</option>
             <option value="__none__">Sin clasificar</option>
-            {costCenters.filter(cc => !ARCHIVED_COST_CENTERS.has(cc.nombre.toUpperCase().trim())).map(cc => <option key={cc.id} value={cc.id}>{formatCostCenter(cc)}</option>)}
+            {costCenters.filter(cc => cc.numero != null || !ARCHIVED_COST_CENTERS.has(cc.nombre.toUpperCase().trim())).map(cc => <option key={cc.id} value={cc.id}>{formatCostCenter(cc)}</option>)}
           </select>
         </div>
         <button
@@ -298,7 +298,7 @@ export default function TercerosPage() {
                         className="text-xs font-bold bg-zinc-100 dark:bg-zinc-800 rounded-lg px-3 py-1.5 border-none focus:ring-2 focus:ring-primary/30 dark:text-white"
                       >
                         <option value="">Sin clasificar</option>
-                        {costCenters.filter(cc => !ARCHIVED_COST_CENTERS.has(cc.nombre.toUpperCase().trim()) || cc.id.toString() === editCC).map(cc => <option key={cc.id} value={cc.id}>{formatCostCenter(cc)}</option>)}
+                        {costCenters.filter(cc => cc.numero != null || !ARCHIVED_COST_CENTERS.has(cc.nombre.toUpperCase().trim()) || cc.id.toString() === editCC).map(cc => <option key={cc.id} value={cc.id}>{formatCostCenter(cc)}</option>)}
                       </select>
                     ) : (
                       t.centros_costo ? (
@@ -377,7 +377,7 @@ export default function TercerosPage() {
                   <select value={newCC} onChange={e => setNewCC(e.target.value)}
                     className="w-full mt-1 p-3 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-primary text-sm appearance-none">
                     <option value="">Sin clasificar</option>
-                    {costCenters.filter(cc => !ARCHIVED_COST_CENTERS.has(cc.nombre.toUpperCase().trim())).map(cc => <option key={cc.id} value={cc.id}>{formatCostCenter(cc)}</option>)}
+                    {costCenters.filter(cc => cc.numero != null || !ARCHIVED_COST_CENTERS.has(cc.nombre.toUpperCase().trim())).map(cc => <option key={cc.id} value={cc.id}>{formatCostCenter(cc)}</option>)}
                   </select>
                 </div>
                 <div>

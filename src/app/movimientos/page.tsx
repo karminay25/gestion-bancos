@@ -456,7 +456,7 @@ function AccountLedger({ account, movements, costCenters, terceros, onRefresh, i
                             onChange={(e) => setSelectedCC(e.target.value)}
                         >
                             <option value="" className="dark:bg-zinc-900">Todos los Centros</option>
-                            {costCenters.filter(cc => !ARCHIVED_COST_CENTERS.has(cc.nombre.toUpperCase().trim()) || manuallyActivatedCCNames.has(cc.nombre.toUpperCase().trim())).map(cc => <option key={cc.id} value={cc.id} className="dark:bg-zinc-900">{formatCostCenter(cc)}</option>)}
+                            {costCenters.filter(cc => cc.numero != null || !ARCHIVED_COST_CENTERS.has(cc.nombre.toUpperCase().trim()) || manuallyActivatedCCNames.has(cc.nombre.toUpperCase().trim())).map(cc => <option key={cc.id} value={cc.id} className="dark:bg-zinc-900">{formatCostCenter(cc)}</option>)}
                         </select>
                     </div>
                     {isAdmin && (
@@ -552,7 +552,7 @@ function AccountLedger({ account, movements, costCenters, terceros, onRefresh, i
                             >
                                 <option value="" className="dark:bg-zinc-900">Asignar Centro de Costo...</option>
                                 <option value="null" className="dark:bg-zinc-900">-- Quitar Centro --</option>
-                                {costCenters.filter(cc => !ARCHIVED_COST_CENTERS.has(cc.nombre.toUpperCase().trim()) || manuallyActivatedCCNames.has(cc.nombre.toUpperCase().trim())).map(cc => <option key={cc.id} value={cc.id} className="dark:bg-zinc-900">{formatCostCenter(cc)}</option>)}
+                                {costCenters.filter(cc => cc.numero != null || !ARCHIVED_COST_CENTERS.has(cc.nombre.toUpperCase().trim()) || manuallyActivatedCCNames.has(cc.nombre.toUpperCase().trim())).map(cc => <option key={cc.id} value={cc.id} className="dark:bg-zinc-900">{formatCostCenter(cc)}</option>)}
                             </select>
                             <button 
                                 onClick={handleBulkDelete}
@@ -756,7 +756,7 @@ function AccountLedger({ account, movements, costCenters, terceros, onRefresh, i
                                                     className={`text-[9px] font-black uppercase px-2 py-1 rounded-xl border-none focus:ring-2 focus:ring-primary/20 appearance-none cursor-pointer transition-all ${hasSuggestion ? "bg-primary/10 text-primary border border-primary/20 animate-pulse" : "bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-50 hover:bg-zinc-200 dark:hover:bg-zinc-700"} ${isUpdating === move.id ? "opacity-50" : ""}`}
                                                 >
                                                     <option value="" className="dark:bg-zinc-900">{hasSuggestion ? `SUG: ${formatCostCenter(suggestedCC)}` : "Gral"}</option>
-                                                    {costCenters.filter(cc => !ARCHIVED_COST_CENTERS.has(cc.nombre.toUpperCase().trim()) || manuallyActivatedCCNames.has(cc.nombre.toUpperCase().trim()) || cc.id === move.centro_costo_id).map(cc => <option key={cc.id} value={cc.id} className="dark:bg-zinc-900">{formatCostCenter(cc)}</option>)}
+                                                    {costCenters.filter(cc => cc.numero != null || !ARCHIVED_COST_CENTERS.has(cc.nombre.toUpperCase().trim()) || manuallyActivatedCCNames.has(cc.nombre.toUpperCase().trim()) || cc.id === move.centro_costo_id).map(cc => <option key={cc.id} value={cc.id} className="dark:bg-zinc-900">{formatCostCenter(cc)}</option>)}
                                                 </select>
                                                 {hasSuggestion && (
                                                     <div className="absolute -top-3 left-1 flex items-center gap-1 opacity-0 group-hover/cc:opacity-100 transition-opacity">

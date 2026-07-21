@@ -240,7 +240,7 @@ export default function AnalisisPage() {
             <Tag className="w-4 h-4 text-amber-500" />
             <select value={selectedCC} onChange={e => setSelectedCC(e.target.value)} className="bg-transparent text-xs font-black uppercase text-zinc-600 dark:text-zinc-400 border-none focus:ring-0">
               <option value="all">Todos los Centros</option>
-              {costCenters.filter(cc => !ARCHIVED_COST_CENTERS.has(cc.nombre.toUpperCase().trim()) || manuallyActivatedCCNames.has(cc.nombre.toUpperCase().trim()) || cc.id.toString() === selectedCC).map(cc => (
+              {costCenters.filter(cc => cc.numero != null || !ARCHIVED_COST_CENTERS.has(cc.nombre.toUpperCase().trim()) || manuallyActivatedCCNames.has(cc.nombre.toUpperCase().trim()) || cc.id.toString() === selectedCC).map(cc => (
                 <option key={cc.id} value={cc.id}>{formatCostCenter(cc)}</option>
               ))}
             </select>
