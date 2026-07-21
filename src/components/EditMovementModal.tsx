@@ -18,6 +18,7 @@ export function EditMovementModal({ movement, onClose, onSuccess }: EditMovement
   const [formData, setFormData] = useState({
     fecha: movement.fecha || "",
     tipo: movement.tipo || "Egreso",
+    traspasoType: parseFloat(movement.monto) < 0 ? "out" : "in",
     monto: Math.abs(parseFloat(movement.monto)).toString(),
     saldoo: movement.saldoo !== null && movement.saldoo !== undefined ? movement.saldoo.toString() : "",
   });
@@ -44,6 +45,8 @@ export function EditMovementModal({ movement, onClose, onSuccess }: EditMovement
           finalMonto = -Math.abs(parsedMonto);
       } else if (formData.tipo === 'Ingreso') {
           finalMonto = Math.abs(parsedMonto);
+      } else if (formData.tipo === 'Traspaso') {
+          finalMonto = formData.traspasoType === 'out' ? -Math.abs(parsedMonto) : Math.abs(parsedMonto);
       }
 
       const updates = {
@@ -136,6 +139,30 @@ export function EditMovementModal({ movement, onClose, onSuccess }: EditMovement
                 </select>
               </div>
             </div>
+
+            {formData.tipo === 'Traspaso' && (
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-zinc-700 dark:text-zinc-300 uppercase tracking-wider">
+                  Dirección del Traspaso
+                </label>
+                <div className="flex p-1 bg-zinc-100 dark:bg-zinc-900 rounded-xl">
+                  <button
+                    type="button"
+                    onClick={() => setFormData({ ...formData, traspasoType: "out" })}
+                    className={`flex-1 py-2.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all ${formData.traspasoType === 'out' ? "bg-blue-500 text-white" : "text-zinc-500 dark:text-zinc-400"}`}
+                  >
+                    Salida (-)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFormData({ ...formData, traspasoType: "in" })}
+                    className={`flex-1 py-2.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all ${formData.traspasoType === 'in' ? "bg-blue-500 text-white" : "text-zinc-500 dark:text-zinc-400"}`}
+                  >
+                    Entrada (+)
+                  </button>
+                </div>
+              </div>
+            )}
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">

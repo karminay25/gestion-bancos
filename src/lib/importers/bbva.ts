@@ -78,9 +78,20 @@ export function parseBBVA(buffer: Buffer) {
         const concepto = row[1]?.toString() || "";
         const referencia = row[2]?.toString() || "";
         const refAmpliada = row[3]?.toString() || "";
-        
+
         // Strip leading numbers from Nombre (Referencia Ampliada)
         const nombre = refAmpliada.replace(/^\d+/, '').trim() || concepto;
+
+        // El concepto que se guarda incorpora la "Referencia Ampliada" (col D),
+        // que es el texto detallado del movimiento en el estado de cuenta BBVA.
+        // Se conserva el concepto corto del banco (col B) como prefijo para no
+        // perder las palabras clave usadas en la auto-clasificación (p. ej. TRASPASO).
+        const conceptoCorto = concepto.trim().replace(/\s+/g, ' ');
+        const refAmpliadaLimpia = refAmpliada.trim().replace(/\s+/g, ' ');
+        let conceptoFinal = conceptoCorto;
+        if (refAmpliadaLimpia && !conceptoCorto.toUpperCase().includes(refAmpliadaLimpia.toUpperCase())) {
+            conceptoFinal = conceptoCorto ? `${conceptoCorto} ${refAmpliadaLimpia}` : refAmpliadaLimpia;
+        }
         
         // Col 4 = Cargos (Egreso), Col 5 = Abonos (Ingreso)
         const cargo = Math.abs(cleanNum(row[4]));
@@ -99,7 +110,7 @@ export function parseBBVA(buffer: Buffer) {
 
         movements.push({
             fecha,
-            concepto: concepto.trim().replace(/\s+/g, ' '),
+            concepto: conceptoFinal,
             referencia,
             descripcion: nombre, // manteniendo compatibilidad
             proveedor: nombre,   // nuevo campo con el nombre del proveedor
