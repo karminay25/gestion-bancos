@@ -21,7 +21,6 @@ import {
   Leaf,
   BookUser,
   Sparkles,
-  ArrowUpDown,
   RefreshCw,
   FileText,
   FileCheck,
@@ -279,46 +278,17 @@ function AccountLedger({ account, movements, costCenters, terceros, onRefresh, i
 
     const handleNombreUpdate = async (moveId: string, newValue: string) => {
         setIsUpdating(moveId);
-        
-        // 1. Get the current movement to know its raw history
-        const move = movementsWithBalance.find(m => m.id === moveId);
-        if (!move) {
-            alert('Movimiento no encontrado');
-            return;
-        }
-        const originalRaw = move.nombre_tercero;
-        const empresaId = move.cuentas_bancarias?.empresa_id;
-        
+
+        // Cada movimiento guarda su propio nombre_tercero de forma independiente:
+        // esta acción ya NO escribe en el directorio "terceros", que antes hacía que
+        // editar un movimiento cambiara visualmente el nombre de TODOS los demás
+        // movimientos que compartían el mismo texto crudo del banco (p. ej. varios
+        // movimientos distintos limpiados a "POR IDENTIFICAR").
         const { error } = await supabase.from('movimientos').update({ nombre_tercero: newValue }).eq('id', moveId);
-        
+
         if (error) {
             alert('Error al actualizar nombre: ' + error.message);
         } else {
-            // 3. "LEARNING MODE": Update or create mapping in Terceros directory
-            // We search for a match specific to this company first
-            const { data: existing } = await supabase.from('terceros')
-                .select('*')
-                .eq('nombre_raw', originalRaw)
-                .or(`empresa_id.eq.${empresaId},empresa_id.is.null`)
-                .order('empresa_id', { ascending: false }) // Prioritize company-specific
-                .limit(1)
-                .single();
-            
-            if (existing && existing.empresa_id === empresaId) {
-                // Update existing company-specific mapping
-                await supabase.from('terceros').update({ 
-                    nombre_canonico: newValue,
-                    centro_costo_id: move.centro_costo_id || existing.centro_costo_id 
-                }).eq('id', existing.id);
-            } else {
-                // Create NEW company-specific mapping (even if a global one exists, we override for this company)
-                await supabase.from('terceros').insert({
-                    nombre_raw: originalRaw,
-                    nombre_canonico: newValue,
-                    centro_costo_id: move.centro_costo_id || null,
-                    empresa_id: empresaId
-                });
-            }
             onRefresh();
         }
         setIsUpdating(null);
@@ -647,71 +617,19 @@ function AccountLedger({ account, movements, costCenters, terceros, onRefresh, i
                                     {move.fecha.split('-').reverse().join('/')}
                                 </td>
                                 <td className="px-5 py-5 min-w-[220px]">
-                                    <div className="space-y-1">
-                                        {(() => {
-                                            // Find mapping: prioritize company-specific over global
-                                            const terc = terceros
-                                                .filter(t => t.nombre_raw === move.nombre_tercero)
-                                                .sort((a, b) => (b.empresa_id ? 1 : 0) - (a.empresa_id ? 1 : 0))[0];
-                                            
-                                            const hasDiff = terc && terc.nombre_canonico !== move.nombre_tercero;
-                                            
-                                            return (
-                                              <>
-                                                <div className="flex items-center gap-2">
-                                                    <input
-                                                        type="text"
-                                                        readOnly={!isAdmin}
-                                                        defaultValue={hasDiff ? terc.nombre_canonico : (move.nombre_tercero || '')}
-                                                        placeholder="Nombre del Tercero..."
-                                                        onBlur={(e) => {
-                                                            const val = e.target.value;
-                                                            if (val !== (hasDiff ? terc.nombre_canonico : move.nombre_tercero)) {
-                                                                handleNombreUpdate(move.id, val);
-                                                            }
-                                                        }}
-                                                        className={`w-full bg-transparent border-none focus:ring-1 focus:ring-primary/20 rounded-lg text-xs font-black transition-all ${hasDiff ? "text-primary italic" : "text-zinc-900 dark:text-zinc-50"} ${isUpdating === move.id ? "opacity-50" : isAdmin ? "hover:bg-zinc-100 dark:hover:bg-zinc-800" : ""}`}
-                                                    />
-
-                                                    {/* REVERT BUTTON: If corrected, allow restoring original */}
-                                                    {isAdmin && hasDiff && (
-                                                        <button
-                                                            onClick={() => handleNombreUpdate(move.id, move.nombre_tercero)}
-                                                            title="Restaurar nombre original del banco"
-                                                            className="p-1.5 rounded-lg text-zinc-300 hover:text-rose-500 transition-colors"
-                                                        >
-                                                            <ArrowUpDown className="w-3 h-3" />
-                                                        </button>
-                                                    )}
-
-                                                    {/* If it was edited manually and not in directory, offer to save */}
-                                                    {isAdmin && !terc && move.nombre_tercero && (
-                                                        <button
-                                                            onClick={async () => {
-                                                                const { error } = await supabase.from('terceros').insert({
-                                                                    nombre_raw: move.nombre_tercero,
-                                                                    nombre_canonico: move.nombre_tercero
-                                                                });
-                                                                if (error) alert('Error: ' + error.message);
-                                                                else onRefresh();
-                                                            }}
-                                                            title="Guardar en Directorio"
-                                                            className="p-1.5 rounded-lg bg-zinc-50 dark:bg-zinc-800 text-zinc-400 hover:text-primary transition-colors"
-                                                        >
-                                                            <Plus className="w-3 h-3" />
-                                                        </button>
-                                                    )}
-                                                </div>
-                                                
-                                                {hasDiff && (
-                                                  <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-zinc-50 dark:bg-zinc-900 w-fit border border-zinc-100 dark:border-zinc-700">
-                                                    <span className="text-[8px] font-bold text-zinc-400 uppercase tracking-tighter">Banco: {move.nombre_tercero}</span>
-                                                  </div>
-                                                )}
-                                              </>
-                                            );
-                                        })()}
-                                    </div>
+                                    <input
+                                        type="text"
+                                        readOnly={!isAdmin}
+                                        defaultValue={move.nombre_tercero || ''}
+                                        placeholder="Nombre del Tercero..."
+                                        onBlur={(e) => {
+                                            const val = e.target.value;
+                                            if (val !== (move.nombre_tercero || '')) {
+                                                handleNombreUpdate(move.id, val);
+                                            }
+                                        }}
+                                        className={`w-full bg-transparent border-none focus:ring-1 focus:ring-primary/20 rounded-lg text-xs font-black text-zinc-900 dark:text-zinc-50 transition-all ${isUpdating === move.id ? "opacity-50" : isAdmin ? "hover:bg-zinc-100 dark:hover:bg-zinc-800" : ""}`}
+                                    />
                                 </td>
                                 <td className="px-5 py-5 text-center">
                                     {move.tipo === 'Ingreso' ? (
