@@ -254,7 +254,7 @@ export function ManualLinkModal({ invoice, onClose, onSuccess }: ManualLinkModal
                                     <DollarSign className="w-4 h-4 text-zinc-400 mt-0.5" />
                                     <div>
                                         <p className="text-[10px] font-black text-zinc-400 uppercase">Monto Total</p>
-                                        <p className="text-lg font-black text-primary">${parseFloat(invoice.monto_total).toLocaleString()} <span className="text-[10px]">{invoice.moneda}</span></p>
+                                        <p className="text-lg font-black text-primary">${parseFloat(invoice.monto_total).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} <span className="text-[10px]">{invoice.moneda}</span></p>
                                     </div>
                                 </div>
                                 <div className="flex items-start gap-3">
@@ -407,7 +407,7 @@ export function ManualLinkModal({ invoice, onClose, onSuccess }: ManualLinkModal
                                         </div>
                                         <div className="flex items-center gap-4">
                                             <p className="text-lg font-black text-zinc-900 dark:text-zinc-50">
-                                                ${parseFloat(move.monto).toLocaleString()}
+                                                ${parseFloat(move.monto).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                                 <span className="text-[10px] ml-1 text-zinc-400">{move.cuentas_bancarias?.moneda}</span>
                                             </p>
                                             <button 

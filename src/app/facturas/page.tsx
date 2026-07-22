@@ -473,7 +473,7 @@ export default function FacturasPage() {
                                         </p>
                                     </td>
                                     <td className="px-6 py-5 text-right">
-                                        <p className="text-sm font-black text-zinc-900 dark:text-zinc-50">${parseFloat(factura.monto_total).toLocaleString()}</p>
+                                        <p className="text-sm font-black text-zinc-900 dark:text-zinc-50">${parseFloat(factura.monto_total).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                                         <p className="text-[9px] font-bold text-zinc-300 dark:text-zinc-400 uppercase tracking-tighter">{factura.moneda}</p>
                                     </td>
                                     <td className="px-6 py-5 text-center" onClick={(e) => e.stopPropagation()}>
@@ -636,7 +636,7 @@ export default function FacturasPage() {
                                 <div className="text-center p-6 rounded-3xl bg-zinc-100 dark:bg-zinc-950 border border-zinc-100 dark:border-zinc-900">
                                     <p className="text-xs font-black uppercase text-zinc-300 dark:text-zinc-400 tracking-wider">Monto Total del XML</p>
                                     <p className="text-4xl font-black text-zinc-900 dark:text-zinc-50 mt-1">
-                                        ${parseFloat(detailInvoice.monto_total).toLocaleString()}
+                                        ${parseFloat(detailInvoice.monto_total).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                         <span className="text-sm font-bold text-zinc-300 dark:text-zinc-400 ml-1.5 uppercase">{detailInvoice.moneda}</span>
                                     </p>
                                     <div className="mt-3 inline-block">
@@ -746,7 +746,7 @@ export default function FacturasPage() {
                                                     <p className="text-[10px] text-zinc-300 dark:text-zinc-400 font-bold uppercase mt-1.5 flex gap-2">
                                                         <span>Fecha: {detailInvoice.movimientos.fecha}</span>
                                                         <span>•</span>
-                                                        <span>Monto: ${parseFloat(detailInvoice.movimientos.monto).toLocaleString()}</span>
+                                                        <span>Monto: ${parseFloat(detailInvoice.movimientos.monto).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                                                     </p>
                                                 </div>
                                             </div>

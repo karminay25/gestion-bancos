@@ -182,7 +182,7 @@ export default function CuentasPage() {
                         <div>
                           <p className="text-[9px] uppercase tracking-widest text-zinc-400 dark:text-zinc-300 font-black mb-1">Saldo Consolidado</p>
                           <p className={`text-3xl font-black ${acc.balance < 0 ? 'text-rose-600' : 'text-zinc-900 dark:text-zinc-50'}`}>
-                            ${acc.balance.toLocaleString()}
+                            ${acc.balance.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </p>
                         </div>
                         <div className="text-right">

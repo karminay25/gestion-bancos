@@ -412,7 +412,7 @@ function AccountLedger({ account, movements, costCenters, terceros, onRefresh, i
                 <div className="text-right flex items-end gap-6">
                     <div className="text-right">
                         <p className="text-[10px] uppercase font-black text-zinc-400 dark:text-zinc-300 tracking-widest mb-1">Saldo Final Actual</p>
-                        <p className="text-3xl font-black text-zinc-900 dark:text-zinc-50">${(currentBalance || 0).toLocaleString()}</p>
+                        <p className="text-3xl font-black text-zinc-900 dark:text-zinc-50">${(currentBalance || 0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                     </div>
                 </div>
             </div>
@@ -633,16 +633,16 @@ function AccountLedger({ account, movements, costCenters, terceros, onRefresh, i
                                 </td>
                                 <td className="px-5 py-5 text-center">
                                     {move.tipo === 'Ingreso' ? (
-                                        <span className="text-xs font-black text-emerald-600">${parseFloat(move.monto).toLocaleString()}</span>
+                                        <span className="text-xs font-black text-emerald-600">${parseFloat(move.monto).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                                     ) : move.tipo === 'Traspaso' && parseFloat(move.monto) >= 0 ? (
-                                        <span className="text-xs font-black text-blue-600">${parseFloat(move.monto).toLocaleString()}</span>
+                                        <span className="text-xs font-black text-blue-600">${parseFloat(move.monto).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                                     ) : '-'}
                                 </td>
                                 <td className="px-5 py-5 text-center">
                                     {move.tipo === 'Egreso' ? (
-                                        <span className="text-xs font-black text-rose-600 dark:text-rose-500">${parseFloat(move.monto).toLocaleString()}</span>
+                                        <span className="text-xs font-black text-rose-600 dark:text-rose-500">${parseFloat(move.monto).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                                     ) : move.tipo === 'Traspaso' && parseFloat(move.monto) < 0 ? (
-                                        <span className="text-xs font-black text-blue-600">${Math.abs(parseFloat(move.monto)).toLocaleString()}</span>
+                                        <span className="text-xs font-black text-blue-600">${Math.abs(parseFloat(move.monto)).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                                     ) : '-'}
                                 </td>
                                 <td className="px-5 py-5 text-right bg-primary/[0.01]">
