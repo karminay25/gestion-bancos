@@ -29,9 +29,9 @@ import {
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "@/lib/supabase";
 import { formatCostCenter } from "@/lib/costCenter";
-import * as XLSX from "xlsx";
 import { NewMovementForm } from "@/components/NewMovementForm";
 import { EditMovementModal } from "@/components/EditMovementModal";
+import { ExportExcelModal } from "@/components/ExportExcelModal";
 import { calculateAccountBalance, sortMovements } from "@/lib/balances";
 import { useAuth } from "@/context/AuthContext";
 
@@ -877,6 +877,7 @@ export default function MovimientosPage() {
   const [expandedAccounts, setExpandedAccounts] = useState<string[]>([]);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
 
   async function fetchData(silent = false) {
     if (!silent) setLoading(true);
@@ -960,27 +961,6 @@ export default function MovimientosPage() {
     );
   };
 
-  const handleExport = () => {
-    if (movements.length === 0) return;
-    
-    const dataToExport = movements.map(m => ({
-        Fecha: m.fecha,
-        Empresa: m.cuentas_bancarias?.empresas?.codigo || 'N/A',
-        Banco: m.cuentas_bancarias?.banco || 'N/A',
-        Tipo: m.tipo,
-        Monto: parseFloat(m.monto),
-        Tercero: m.nombre_tercero,
-        Concepto: m.concepto,
-        Factura: m.factura || '',
-        Centro_Costo: m.centros_costo ? formatCostCenter(m.centros_costo) : 'Gral'
-    }));
-
-    const ws = XLSX.utils.json_to_sheet(dataToExport);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Movimientos");
-    XLSX.writeFile(wb, `Reporte_Bancos_LBO_${new Date().toISOString().split('T')[0]}.xlsx`);
-  };
-
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center h-[60vh]">
@@ -1033,7 +1013,7 @@ export default function MovimientosPage() {
                 </select>
             </div>
             <button
-                onClick={handleExport}
+                onClick={() => setShowExportModal(true)}
                 className="flex items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-5 py-3 text-sm font-bold text-zinc-700 hover:bg-zinc-50 dark:bg-zinc-900 dark:border-zinc-800 transition-all shadow-sm"
             >
                 <Download className="w-5 h-5" />
@@ -1187,12 +1167,23 @@ export default function MovimientosPage() {
 
       <AnimatePresence>
         {showForm && (
-            <NewMovementForm 
-                onClose={() => setShowForm(false)} 
+            <NewMovementForm
+                onClose={() => setShowForm(false)}
                 onSuccess={() => fetchData(true)}
             />
         )}
       </AnimatePresence>
+
+      {showExportModal && (
+        <ExportExcelModal
+            onClose={() => setShowExportModal(false)}
+            movements={movements}
+            accounts={accounts}
+            companies={companies}
+            seasons={seasons}
+            costCenters={costCenters}
+        />
+      )}
     </div>
   );
 }
