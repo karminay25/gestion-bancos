@@ -544,9 +544,9 @@ export function NewMovementForm({ onClose, onSuccess, initialTab = "manual" }: N
                             <FormField label="Tipo">
                                 <div className="flex flex-col gap-2">
                                     <div className="flex p-1 bg-white/5 rounded-xl">
-                                        <button type="button" onClick={() => setFormData({...formData, tipo: "Egreso"})} className={`flex-1 py-3 rounded-lg text-[10px] font-black tracking-widest uppercase transition-all ${formData.tipo === 'Egreso' ? "bg-rose-500 text-white" : "text-zinc-400"}`}>Cargo</button>
+                                        <button type="button" onClick={() => setFormData({...formData, tipo: "Egreso"})} className={`flex-1 py-3 rounded-lg text-[10px] font-black tracking-widest uppercase transition-all ${formData.tipo === 'Egreso' ? "bg-rose-500 text-white" : "text-zinc-400"}`}>Egreso</button>
                                         <button type="button" onClick={() => setFormData({...formData, tipo: "Traspaso", traspasoType: "out"})} className={`flex-1 py-3 rounded-lg text-[10px] font-black tracking-widest uppercase transition-all ${formData.tipo === 'Traspaso' ? "bg-blue-500 text-white" : "text-zinc-400"}`}>Traspaso</button>
-                                        <button type="button" onClick={() => setFormData({...formData, tipo: "Ingreso"})} className={`flex-1 py-3 rounded-lg text-[10px] font-black tracking-widest uppercase transition-all ${formData.tipo === 'Ingreso' ? "bg-emerald-500 text-white" : "text-zinc-400"}`}>Abono</button>
+                                        <button type="button" onClick={() => setFormData({...formData, tipo: "Ingreso"})} className={`flex-1 py-3 rounded-lg text-[10px] font-black tracking-widest uppercase transition-all ${formData.tipo === 'Ingreso' ? "bg-emerald-500 text-white" : "text-zinc-400"}`}>Ingreso</button>
                                     </div>
                                     
                                     {formData.tipo === 'Traspaso' && (
