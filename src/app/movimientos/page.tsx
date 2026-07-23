@@ -592,7 +592,7 @@ function AccountLedger({ account, movements, costCenters, terceros, onRefresh, i
                             <th className="px-5 py-5 text-[9px] font-black uppercase tracking-widest text-zinc-400 dark:text-zinc-300 text-center">Egreso</th>
                             <th className="px-5 py-5 text-[9px] font-black uppercase tracking-widest text-zinc-400 dark:text-zinc-300 text-right bg-primary/[0.03]">Saldo</th>
                             <th className="px-5 py-5 text-[9px] font-black uppercase tracking-widest text-zinc-400 dark:text-zinc-300">Factura</th>
-                            <th className="px-5 py-5 text-[9px] font-black uppercase tracking-widest text-zinc-400 dark:text-zinc-300 min-w-[200px]">Concepto</th>
+                            <th className="px-5 py-5 text-[9px] font-black uppercase tracking-widest text-zinc-400 dark:text-zinc-300 min-w-[320px]">Concepto</th>
                             <th className="px-5 py-5 text-[9px] font-black uppercase tracking-widest text-zinc-400 dark:text-zinc-300">C. Costo</th>
                             <th className="px-5 py-5 text-[9px] font-black uppercase tracking-widest text-zinc-400 dark:text-zinc-300 text-right">Acciones</th>
                         </tr>
@@ -722,7 +722,7 @@ function AccountLedger({ account, movements, costCenters, terceros, onRefresh, i
                                         })()}
                                     </div>
                                 </td>
-                                <td className="px-5 py-5 min-w-[300px]">
+                                <td className="px-5 py-5 min-w-[380px]">
                                     <textarea
                                         rows={1}
                                         readOnly={!isAdmin}
@@ -733,7 +733,7 @@ function AccountLedger({ account, movements, costCenters, terceros, onRefresh, i
                                                 handleConceptoUpdate(move.id, e.target.value);
                                             }
                                         }}
-                                        className={`w-full bg-transparent border-none focus:ring-1 focus:ring-primary/20 rounded-lg text-[10px] text-black dark:text-zinc-50 transition-all resize-none overflow-hidden hover:overflow-y-auto max-h-20 ${isUpdating === move.id ? "opacity-50" : isAdmin ? "hover:bg-zinc-100 dark:hover:bg-zinc-800" : ""}`}
+                                        className={`w-full bg-transparent border-none focus:ring-1 focus:ring-primary/20 rounded-lg text-xs font-black text-black dark:text-zinc-50 transition-all resize-none overflow-hidden hover:overflow-y-auto max-h-20 ${isUpdating === move.id ? "opacity-50" : isAdmin ? "hover:bg-zinc-100 dark:hover:bg-zinc-800" : ""}`}
                                         onInput={(e) => {
                                             const target = e.target as HTMLTextAreaElement;
                                             target.style.height = 'auto';
