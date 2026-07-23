@@ -85,7 +85,7 @@ export default function Dashboard() {
 
   const bankSummary = useMemo(() => {
     return companies.map(company => {
-      const companyAccounts = accounts.filter(a => a.empresa_id === company.id);
+      const companyAccounts = accounts.filter(a => a.empresa_id === company.id && a.banco?.toUpperCase() !== 'CAJA CHICA');
 
       const calculateBalance = (accs: any[]) => {
           return accs.reduce((sum, acc) => {
