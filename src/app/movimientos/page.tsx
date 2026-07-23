@@ -1,10 +1,11 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { 
-  Search, 
-  Filter, 
-  Download, 
+import { useRouter } from "next/navigation";
+import {
+  Search,
+  Filter,
+  Download,
   Plus,
   Loader2,
   ChevronDown,
@@ -21,7 +22,6 @@ import {
   Leaf,
   BookUser,
   Sparkles,
-  RefreshCw,
   FileText,
   FileCheck,
   Edit2
@@ -29,7 +29,6 @@ import {
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "@/lib/supabase";
 import { formatCostCenter } from "@/lib/costCenter";
-import { NewMovementForm } from "@/components/NewMovementForm";
 import { EditMovementModal } from "@/components/EditMovementModal";
 import { ExportExcelModal } from "@/components/ExportExcelModal";
 import { calculateAccountBalance, sortMovements } from "@/lib/balances";
@@ -864,6 +863,7 @@ function AccountLedger({ account, movements, costCenters, terceros, onRefresh, i
 
 export default function MovimientosPage() {
   const { isAdmin } = useAuth();
+  const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [companies, setCompanies] = useState<any[]>([]);
   const [accounts, setAccounts] = useState<any[]>([]);
@@ -872,11 +872,9 @@ export default function MovimientosPage() {
   const [seasons, setSeasons] = useState<any[]>([]);
   const [terceros, setTerceros] = useState<any[]>([]);
   const [selectedSeason, setSelectedSeason] = useState<string>("all");
-  const [showForm, setShowForm] = useState(false);
   const [expandedSections, setExpandedSections] = useState<string[]>([]);
   const [expandedAccounts, setExpandedAccounts] = useState<string[]>([]);
   const [fetchError, setFetchError] = useState<string | null>(null);
-  const [isSyncing, setIsSyncing] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
 
   async function fetchData(silent = false) {
@@ -1020,39 +1018,13 @@ export default function MovimientosPage() {
                 Exportar
             </button>
             {isAdmin && (
-                <>
-                    <button
-                        onClick={() => setShowForm(true)}
-                        className="flex items-center gap-2 rounded-2xl bg-primary px-6 py-3 text-sm font-bold text-zinc-50 shadow-xl shadow-primary/20 hover:scale-[1.02] transition-all hover:opacity-90 active:scale-95"
-                    >
-                        <Plus className="w-5 h-5" />
-                        Nueva Captura
-                    </button>
-                    <button
-                        onClick={async () => {
-                            setIsSyncing(true);
-                            try {
-                                const res = await fetch('/api/invoices/sync', { method: 'POST' });
-                                const data = await res.json();
-                                if (data.success) {
-                                    alert(`Sincronización completada:\n- Sinc: ${data.sync}\n- Vínculos nuevos: ${data.matches.matched}\n- Sugerencias: ${data.matches.suggested}`);
-                                    fetchData(true);
-                                } else {
-                                    alert('Error: ' + data.error);
-                                }
-                            } catch (e: any) {
-                                alert('Error de red: ' + e.message);
-                            } finally {
-                                setIsSyncing(false);
-                            }
-                        }}
-                        disabled={isSyncing}
-                        className={`flex items-center gap-2 rounded-2xl bg-emerald-500 px-6 py-3 text-sm font-bold text-zinc-50 shadow-xl shadow-emerald-500/20 hover:scale-[1.02] transition-all hover:opacity-90 active:scale-95 ${isSyncing ? "opacity-50 cursor-wait" : ""}`}
-                    >
-                        <RefreshCw className={`w-5 h-5 ${isSyncing ? "animate-spin" : ""}`} />
-                        {isSyncing ? "Sincronizando..." : "Sincronizar Facturas"}
-                    </button>
-                </>
+                <button
+                    onClick={() => router.push('/movimientos/nueva-captura')}
+                    className="flex items-center gap-2 rounded-2xl bg-primary px-6 py-3 text-sm font-bold text-zinc-50 shadow-xl shadow-primary/20 hover:scale-[1.02] transition-all hover:opacity-90 active:scale-95"
+                >
+                    <Plus className="w-5 h-5" />
+                    Nueva Captura
+                </button>
             )}
         </div>
       </div>
@@ -1164,15 +1136,6 @@ export default function MovimientosPage() {
             );
         })}
       </div>
-
-      <AnimatePresence>
-        {showForm && (
-            <NewMovementForm
-                onClose={() => setShowForm(false)}
-                onSuccess={() => fetchData(true)}
-            />
-        )}
-      </AnimatePresence>
 
       {showExportModal && (
         <ExportExcelModal

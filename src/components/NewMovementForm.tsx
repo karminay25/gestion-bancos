@@ -58,9 +58,13 @@ interface NewMovementFormProps {
   onClose: () => void;
   onSuccess: () => void;
   initialTab?: "manual" | "import";
+  // Cuando es true, se renderiza como contenido de pagina normal (sin overlay
+  // fijo ni fondo semitransparente) para usarse en una ruta propia en vez de
+  // como modal flotante sobre otra pantalla.
+  asPage?: boolean;
 }
 
-export function NewMovementForm({ onClose, onSuccess, initialTab = "manual" }: NewMovementFormProps) {
+export function NewMovementForm({ onClose, onSuccess, initialTab = "manual", asPage = false }: NewMovementFormProps) {
   const [activeTab, setActiveTab] = useState<"manual" | "import">(initialTab);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -371,13 +375,13 @@ export function NewMovementForm({ onClose, onSuccess, initialTab = "manual" }: N
   };
 
   return (
-    <motion.div 
+    <motion.div
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md p-4"
+      className={asPage ? "w-full" : "fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md p-4"}
     >
       <motion.div
         initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 30 }}
-        className="w-full h-full bg-zinc-900 rounded-[2.5rem] shadow-[0_0_100px_-20px_rgba(0,0,0,0.5)] flex flex-col overflow-hidden border border-white/10"
+        className={`w-full ${asPage ? "min-h-[80vh]" : "h-full"} bg-zinc-900 rounded-[2.5rem] shadow-[0_0_100px_-20px_rgba(0,0,0,0.5)] flex flex-col overflow-hidden border border-white/10`}
       >
         <div className="p-8 border-b border-white/10 flex flex-col gap-6 bg-zinc-900/60 backdrop-blur-xl">
            <div className="flex items-center justify-between">
