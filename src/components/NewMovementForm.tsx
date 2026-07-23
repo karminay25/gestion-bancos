@@ -79,7 +79,7 @@ export function NewMovementForm({ onClose, onSuccess, initialTab = "manual" }: N
   // Selection state
   const [selectedEmpresaId, setSelectedEmpresaId] = useState("");
   const [selectedBanco, setSelectedBanco] = useState("");
-  const [selectedMoneda, setSelectedMoneda] = useState("");
+  const [selectedCuentaId, setSelectedCuentaId] = useState("");
 
   // Manual Form state
   const [formData, setFormData] = useState({
@@ -143,25 +143,45 @@ export function NewMovementForm({ onClose, onSuccess, initialTab = "manual" }: N
   const [suggestedBalance, setSuggestedBalance] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Auto-detect Empresa/Banco from filename
+  // Auto-detect Empresa/Banco/Cuenta from filename
   useEffect(() => {
     if (file && activeTab === 'import' && importStep === 1) {
         const name = file.name.toUpperCase();
-        
+
         // Auto-detect Empresa
         const foundEmpresa = companies.find(c => name.includes(c.codigo.toUpperCase()));
         if (foundEmpresa) setSelectedEmpresaId(foundEmpresa.id.toString());
 
         // Auto-detect Banco
-        if (name.includes('BBVA')) setSelectedBanco('BBVA');
-        else if (name.includes('MONEX')) setSelectedBanco('MONEX');
-        else if (name.includes('BAJIO')) setSelectedBanco('BANBAJIO');
+        let guessedBanco = "";
+        if (name.includes('BBVA')) guessedBanco = 'BBVA';
+        else if (name.includes('MONEX')) guessedBanco = 'MONEX';
+        else if (name.includes('BAJIO')) guessedBanco = 'BANBAJIO';
+        if (guessedBanco) setSelectedBanco(guessedBanco);
 
-        // Auto-detect Moneda
-        if (name.includes('USD') || name.includes('DOLARES')) setSelectedMoneda('USD');
-        else if (name.includes('MXN') || name.includes('PESOS')) setSelectedMoneda('MXN');
+        // Autoseleccionar la cuenta especifica SOLO si el nombre del archivo
+        // deja una unica candidata posible (empresa + banco + moneda sugerida).
+        // Si hay mas de una cuenta con la misma moneda para ese banco (p. ej.
+        // las 2 cuentas BAJIO en USD), se deja sin seleccionar para que el
+        // usuario elija manualmente cual es.
+        if (foundEmpresa && guessedBanco) {
+            let guessedMoneda = "";
+            if (name.includes('USD') || name.includes('DOLARES')) guessedMoneda = 'USD';
+            else if (name.includes('MXN') || name.includes('PESOS')) guessedMoneda = 'MXN';
+
+            const empresaIdStr = foundEmpresa.id.toString();
+            const selBancoUpper = guessedBanco.toUpperCase();
+            const candidates = accounts.filter(a => {
+                const dbBanco = a.banco.toUpperCase();
+                const dbDesc = a.descripcion.toUpperCase();
+                const bancoMatch = dbBanco.includes(selBancoUpper) || dbDesc.includes(selBancoUpper) ||
+                                    (selBancoUpper === 'BANBAJIO' && (dbBanco.includes('BAJIO') || dbDesc.includes('BAJIO')));
+                return a.empresa_id.toString() === empresaIdStr && bancoMatch && (!guessedMoneda || a.moneda === guessedMoneda);
+            });
+            if (candidates.length === 1) setSelectedCuentaId(candidates[0].id);
+        }
     }
-  }, [file, activeTab, companies, importStep]);
+  }, [file, activeTab, companies, importStep, accounts]);
 
   useEffect(() => {
     async function fetchData() {
@@ -195,25 +215,9 @@ export function NewMovementForm({ onClose, onSuccess, initialTab = "manual" }: N
   }, []);
 
   const currentAccount = useMemo(() => {
-    if (!selectedEmpresaId || !selectedBanco) return null;
-    
-    const findCriteria = (a: any) => {
-      const dbBanco = a.banco.toUpperCase();
-      const dbDesc = a.descripcion.toUpperCase();
-      const selBanco = selectedBanco.toUpperCase();
-      
-      // Handle the mapping: if selected is BANBAJIO, it should match BAJIO in DB
-      const bancoMatch = dbBanco.includes(selBanco) || 
-                         dbDesc.includes(selBanco) || 
-                         (selBanco === 'BANBAJIO' && (dbBanco.includes('BAJIO') || dbDesc.includes('BAJIO')));
-
-      return a.empresa_id.toString() === selectedEmpresaId &&
-             bancoMatch &&
-             (selectedBanco === 'MONEX' && activeTab === 'import' ? true : a.moneda === selectedMoneda);
-    };
-
-    return accounts.find(findCriteria);
-  }, [accounts, selectedEmpresaId, selectedBanco, selectedMoneda, activeTab]);
+    if (!selectedCuentaId) return null;
+    return accounts.find(a => a.id === selectedCuentaId) || null;
+  }, [accounts, selectedCuentaId]);
 
   const availableBancos = useMemo(() => {
     if (!selectedEmpresaId) return [];
@@ -226,18 +230,21 @@ export function NewMovementForm({ onClose, onSuccess, initialTab = "manual" }: N
     })));
   }, [accounts, selectedEmpresaId]);
 
-  const availableMonedas = useMemo(() => {
+  // Cuentas especificas disponibles para la empresa+banco elegidos. Se lista
+  // por cuenta (no solo por moneda) porque puede haber mas de una cuenta con
+  // la misma moneda bajo el mismo banco (p. ej. las 2 cuentas BAJIO en USD:
+  // "BAJIO CAPTADORA CRÉDITO" y "BAJIO DISPONIBLE").
+  const availableCuentas = useMemo(() => {
     if (!selectedEmpresaId || !selectedBanco) return [];
     const selBanco = selectedBanco.toUpperCase();
-    const accs = accounts.filter(a => {
+    return accounts.filter(a => {
         const dbBanco = a.banco.toUpperCase();
         const dbDesc = a.descripcion.toUpperCase();
-        const bancoMatch = dbBanco.includes(selBanco) || 
-                           dbDesc.includes(selBanco) || 
+        const bancoMatch = dbBanco.includes(selBanco) ||
+                           dbDesc.includes(selBanco) ||
                            (selBanco === 'BANBAJIO' && (dbBanco.includes('BAJIO') || dbDesc.includes('BAJIO')));
         return a.empresa_id.toString() === selectedEmpresaId && bancoMatch;
     });
-    return Array.from(new Set(accs.map(a => a.moneda)));
   }, [accounts, selectedEmpresaId, selectedBanco]);
 
   const handleSubmitManual = async (e: React.FormEvent) => {
@@ -376,7 +383,7 @@ export function NewMovementForm({ onClose, onSuccess, initialTab = "manual" }: N
            <div className="flex items-center justify-between">
               <div>
                  <h2 className="text-2xl font-black text-white tracking-tight uppercase italic underline decoration-primary decoration-4 underline-offset-8">Centro de Registro</h2>
-                 <p className="text-sm text-zinc-300 mt-2 font-medium">Sincroniza tus finanzas con precisión.</p>
+                 <p className="text-sm text-white mt-2 font-medium">Sincroniza tus finanzas con precisión.</p>
               </div>
               <button onClick={onClose} className="p-4 rounded-2xl bg-white/10 hover:bg-white/20 border border-white/10 transition-all group">
                  <X className="w-6 h-6 text-white group-hover:scale-110 transition-transform" />
@@ -409,16 +416,16 @@ export function NewMovementForm({ onClose, onSuccess, initialTab = "manual" }: N
 
             <div className="space-y-4">
                 <div className="flex items-center justify-between px-2">
-                    <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-zinc-400">1. Configuración de Cuenta</h3>
+                    <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-white">1. Configuración de Cuenta</h3>
                     {!currentAccount && selectedEmpresaId && selectedBanco && (
                         <span className="text-[9px] font-black uppercase text-rose-500 animate-pulse">Cuenta no encontrada</span>
                     )}
                 </div>
                 <div className="grid grid-cols-3 gap-3 bg-white/5 p-6 rounded-[2rem] border border-white/5 shadow-inner">
                     <FormField label="Empresa">
-                        <select 
+                        <select
                             value={selectedEmpresaId}
-                            onChange={e => { setSelectedEmpresaId(e.target.value); setSelectedBanco(""); setSelectedMoneda(""); }}
+                            onChange={e => { setSelectedEmpresaId(e.target.value); setSelectedBanco(""); setSelectedCuentaId(""); }}
                             className="select-custom-dark"
                             style={{ color: 'white' }}
                         >
@@ -427,9 +434,9 @@ export function NewMovementForm({ onClose, onSuccess, initialTab = "manual" }: N
                         </select>
                     </FormField>
                     <FormField label="Banco">
-                        <select 
+                        <select
                             value={selectedBanco}
-                            onChange={e => { setSelectedBanco(e.target.value); setSelectedMoneda(""); }}
+                            onChange={e => { setSelectedBanco(e.target.value); setSelectedCuentaId(""); }}
                             className="select-custom-dark"
                             disabled={!selectedEmpresaId}
                             style={{ color: 'white' }}
@@ -438,16 +445,16 @@ export function NewMovementForm({ onClose, onSuccess, initialTab = "manual" }: N
                             {availableBancos.map(b => <option key={b} value={b} style={{ color: 'white' }}>{b}</option>)}
                         </select>
                     </FormField>
-                    <FormField label="Moneda">
-                        <select 
-                            value={selectedMoneda}
-                            onChange={e => setSelectedMoneda(e.target.value)}
-                            className={`select-custom-dark ${!selectedMoneda ? "border-primary/50 bg-primary/5" : ""}`}
+                    <FormField label="Cuenta">
+                        <select
+                            value={selectedCuentaId}
+                            onChange={e => setSelectedCuentaId(e.target.value)}
+                            className={`select-custom-dark ${!selectedCuentaId ? "border-primary/50 bg-primary/5" : ""}`}
                             disabled={!selectedBanco}
                             style={{ color: 'white' }}
                         >
                             <option value="" style={{ color: 'white' }}>Selecciona...</option>
-                            {availableMonedas.map(m => <option key={m} value={m} style={{ color: 'white' }}>{m}</option>)}
+                            {availableCuentas.map(a => <option key={a.id} value={a.id} style={{ color: 'white' }}>{a.descripcion?.trim() || a.banco} ({a.moneda})</option>)}
                         </select>
                     </FormField>
                 </div>
@@ -524,7 +531,7 @@ export function NewMovementForm({ onClose, onSuccess, initialTab = "manual" }: N
             {currentAccount && (
                 <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="p-4 bg-primary/10 border border-primary/20 rounded-2xl flex items-center gap-3">
                     <CheckCircle2 className="w-5 h-5 text-primary" />
-                    <p className="text-xs font-black text-zinc-300 uppercase tracking-widest">
+                    <p className="text-xs font-black text-white uppercase tracking-widest">
                         Cuenta: <span className="text-white underline decoration-primary decoration-2 underline-offset-4">{currentAccount.descripcion} ({currentAccount.moneda})</span>
                     </p>
                 </motion.div>
@@ -656,7 +663,7 @@ export function NewMovementForm({ onClose, onSuccess, initialTab = "manual" }: N
                 ) : (
                     <motion.div key="import" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-6">
                         <div className="flex items-center justify-between px-2">
-                            <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-zinc-400">2. Cargar Archivo Bancario</h3>
+                            <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-white">2. Cargar Archivo Bancario</h3>
                         </div>
                         {importStep === 1 ? (
                             <div className="space-y-6">
@@ -821,7 +828,7 @@ export function NewMovementForm({ onClose, onSuccess, initialTab = "manual" }: N
 function FormField({ label, children }: { label: string, children: React.ReactNode }) {
     return (
         <div className="space-y-2 text-left">
-            <label className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-300 ml-1">{label}</label>
+            <label className="text-[10px] font-black uppercase tracking-[0.2em] text-white ml-1">{label}</label>
             {children}
         </div>
     );
