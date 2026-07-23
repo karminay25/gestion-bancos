@@ -86,41 +86,27 @@ export default function Dashboard() {
   const bankSummary = useMemo(() => {
     return companies.map(company => {
       const companyAccounts = accounts.filter(a => a.empresa_id === company.id);
-      const banks = ['BBVA', 'MONEX', 'BAJIO'];
-      
-      let rows: any[] = [];
 
       const calculateBalance = (accs: any[]) => {
           return accs.reduce((sum, acc) => {
               const accMoves = allMovements.filter(m => m.cuenta_id === acc.id);
-              const current = calculateAccountBalance(accMoves);
-
-              if (acc.descripcion.includes('PESOS')) {
-                  console.log(`[BalanceTrace] Account: ${acc.descripcion}, Final result: ${current}`);
-              }
-
-              return sum + current;
+              return sum + calculateAccountBalance(accMoves);
           }, 0);
       };
-      
-      banks.forEach(bank => {
-        const bankAccounts = companyAccounts.filter(a => {
-            const matchesBank = a.banco.toUpperCase().includes(bank) || (a.descripcion && a.descripcion.toUpperCase().includes(bank));
-            if (bank === 'BAJIO') return matchesBank && !a.descripcion?.toUpperCase().includes('CREDITO');
-            return matchesBank;
-        });
 
-        if (bankAccounts.length > 0) {
-            const mxn = calculateBalance(bankAccounts.filter(a => a.moneda === 'MXN'));
-            const usd = calculateBalance(bankAccounts.filter(a => a.moneda === 'USD'));
-            rows.push({ bank, mxn, usd });
-        }
+      // Una fila por cada cuenta real (no agrupada por nombre de banco): asi
+      // se ven todas las cuentas por separado, incluso cuando hay mas de una
+      // del mismo banco y moneda (p. ej. las 3 cuentas BAJIO de LOLA), y no
+      // depende de coincidencias de texto en la descripcion que se rompen
+      // si la cuenta se renombra.
+      const rows = companyAccounts.map(acc => {
+          const balance = calculateBalance([acc]);
+          return {
+              bank: acc.descripcion?.trim() || acc.banco,
+              mxn: acc.moneda === 'MXN' ? balance : 0,
+              usd: acc.moneda === 'USD' ? balance : 0,
+          };
       });
-
-      const creditoAccounts = companyAccounts.filter(a => a.descripcion?.toUpperCase().includes('CREDITO BAJIO'));
-      if (creditoAccounts.length > 0) {
-          rows.push({ bank: 'BAJIO CREDITO', mxn: 0, usd: calculateBalance(creditoAccounts) });
-      }
 
       return {
         ...company,
