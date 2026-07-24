@@ -6,8 +6,23 @@ export interface TemporadaRange {
 
 // Compara fechas como texto ISO (YYYY-MM-DD), lo cual funciona correctamente
 // porque ese formato ordena lexicográficamente igual que cronológicamente.
+// Usa los getters LOCALES (no toISOString, que es UTC) para que "hoy" no se
+// adelante un dia en husos horarios detras de UTC como el de México durante
+// las horas de la tarde/noche.
 function today() {
-  return new Date().toISOString().split('T')[0];
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+// Formatea una fecha guardada como texto "YYYY-MM-DD" sin pasar por el
+// constructor de Date (que la interpreta como medianoche UTC y puede mostrar
+// el dia anterior en husos horarios detras de UTC, como México).
+export function formatFechaLocal(fecha: string): string {
+  const [y, m, d] = fecha.split('-');
+  return `${parseInt(d, 10)}/${parseInt(m, 10)}/${y}`;
 }
 
 // Una temporada esta "activa" si ya inicio (fecha_inicio <= hoy) y, si tiene

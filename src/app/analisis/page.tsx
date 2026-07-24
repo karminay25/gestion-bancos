@@ -12,7 +12,7 @@ import {
 } from "recharts";
 import { supabase } from "@/lib/supabase";
 import { formatCostCenter } from "@/lib/costCenter";
-import { isTemporadaActiva } from "@/lib/temporadas";
+import { isTemporadaActiva, formatFechaLocal } from "@/lib/temporadas";
 import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, isWithinInterval, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
 
@@ -268,7 +268,7 @@ export default function AnalisisPage() {
         <div className="flex items-center gap-3 p-4 rounded-2xl bg-emerald-500/5 border border-emerald-500/20">
           <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
           <p className="text-xs font-black uppercase tracking-widest text-emerald-600">Temporada Activa: {activeSeason.nombre}</p>
-          {activeSeason.fecha_inicio && <p className="text-xs text-zinc-500 font-medium">Desde {new Date(activeSeason.fecha_inicio).toLocaleDateString('es-MX')}</p>}
+          {activeSeason.fecha_inicio && <p className="text-xs text-zinc-500 font-medium">Desde {formatFechaLocal(activeSeason.fecha_inicio)}</p>}
         </div>
       )}
 

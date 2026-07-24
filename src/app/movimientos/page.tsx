@@ -33,7 +33,7 @@ import { EditMovementModal } from "@/components/EditMovementModal";
 import { ExportExcelModal } from "@/components/ExportExcelModal";
 import { calculateAccountBalance, sortMovements } from "@/lib/balances";
 import { useAuth } from "@/context/AuthContext";
-import { isTemporadaActiva } from "@/lib/temporadas";
+import { isTemporadaActiva, formatFechaLocal } from "@/lib/temporadas";
 
 // Helper to get Month Name in Spanish
 const getMonthName = (monthStr: string) => {
@@ -1039,7 +1039,7 @@ export default function MovimientosPage() {
             <Leaf className="w-5 h-5 text-primary" />
             <div>
               <p className="text-xs font-black uppercase tracking-widest text-primary">{isActive ? '● Temporada Activa' : 'Temporada Seleccionada'}</p>
-              <p className="text-sm font-bold text-zinc-700 dark:text-zinc-300">{s.nombre} {s.fecha_inicio ? `· Inicio: ${new Date(s.fecha_inicio).toLocaleDateString('es-MX')}` : ''}{s.fecha_fin ? ` · Fin: ${new Date(s.fecha_fin).toLocaleDateString('es-MX')}` : ''}</p>
+              <p className="text-sm font-bold text-zinc-700 dark:text-zinc-300">{s.nombre} {s.fecha_inicio ? `· Inicio: ${formatFechaLocal(s.fecha_inicio)}` : ''}{s.fecha_fin ? ` · Fin: ${formatFechaLocal(s.fecha_fin)}` : ''}</p>
             </div>
             <button onClick={() => setSelectedSeason('all')} className="ml-auto text-xs font-black text-zinc-400 hover:text-rose-500 transition-colors uppercase tracking-widest">Quitar filtro ×</button>
           </div>

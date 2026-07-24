@@ -5,7 +5,7 @@ import { Leaf, Plus, Play, Square, CalendarDays, Loader2, X, AlertCircle } from 
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
-import { isTemporadaActiva } from "@/lib/temporadas";
+import { isTemporadaActiva, formatFechaLocal } from "@/lib/temporadas";
 
 export default function TemporadasPage() {
   const { isAdmin } = useAuth();
@@ -148,12 +148,12 @@ export default function TemporadasPage() {
                             <div className="flex items-center gap-3 text-sm text-zinc-500">
                                 <CalendarDays className="w-4 h-4 text-zinc-400" />
                                 <span className="font-medium">Inicio:</span> 
-                                <span className="font-bold text-zinc-700 dark:text-zinc-300">{t.fecha_inicio ? new Date(t.fecha_inicio).toLocaleDateString() : 'Pendiente'}</span>
+                                <span className="font-bold text-zinc-700 dark:text-zinc-300">{t.fecha_inicio ? formatFechaLocal(t.fecha_inicio) : 'Pendiente'}</span>
                             </div>
                             <div className="flex items-center gap-3 text-sm text-zinc-500">
                                 <CalendarDays className="w-4 h-4 text-zinc-400" />
                                 <span className="font-medium">Fin:</span> 
-                                <span className="font-bold text-zinc-700 dark:text-zinc-300">{t.fecha_fin ? new Date(t.fecha_fin).toLocaleDateString() : 'Pendiente'}</span>
+                                <span className="font-bold text-zinc-700 dark:text-zinc-300">{t.fecha_fin ? formatFechaLocal(t.fecha_fin) : 'Pendiente'}</span>
                             </div>
                         </div>
 
