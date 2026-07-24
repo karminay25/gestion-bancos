@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Leaf, Plus, Play, Square, CalendarDays, Loader2, X, AlertCircle } from "lucide-react";
+import { Leaf, Plus, Play, Square, CalendarDays, Loader2, X, AlertCircle, Pencil } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
@@ -25,6 +25,12 @@ export default function TemporadasPage() {
     temporada: any;
   } | null>(null);
   const [actionDate, setActionDate] = useState(new Date().toISOString().split('T')[0]);
+
+  // Edit Modal (nombre, descripcion y fechas, disponible sin importar el
+  // estado de la temporada — a diferencia de Iniciar/Finalizar, que solo
+  // aplican una vez cada uno)
+  const [editModal, setEditModal] = useState<any | null>(null);
+  const [editForm, setEditForm] = useState({ nombre: "", descripcion: "", fecha_inicio: "", fecha_fin: "" });
 
   useEffect(() => {
     fetchTemporadas();
@@ -94,6 +100,41 @@ export default function TemporadasPage() {
     setIsSaving(false);
   };
 
+  const openEdit = (t: any) => {
+    setEditForm({
+      nombre: t.nombre || "",
+      descripcion: t.descripcion || "",
+      fecha_inicio: t.fecha_inicio || "",
+      fecha_fin: t.fecha_fin || "",
+    });
+    setEditModal(t);
+  };
+
+  const handleSaveEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editModal) return;
+    setIsSaving(true);
+    setError(null);
+
+    const { error: updError } = await supabase
+      .from('temporadas')
+      .update({
+        nombre: editForm.nombre,
+        descripcion: editForm.descripcion,
+        fecha_inicio: editForm.fecha_inicio || null,
+        fecha_fin: editForm.fecha_fin || null,
+      })
+      .eq('id', editModal.id);
+
+    if (updError) {
+      setError(updError.message);
+    } else {
+      setEditModal(null);
+      fetchTemporadas();
+    }
+    setIsSaving(false);
+  };
+
   return (
     <div className="space-y-8">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -134,9 +175,20 @@ export default function TemporadasPage() {
                             <div className="p-4 rounded-2xl bg-primary/10 text-primary">
                                 <Leaf className="w-6 h-6" />
                             </div>
-                            <span className={`px-3 py-1 rounded-full text-xs font-black uppercase tracking-widest ${status.color}`}>
-                                {status.label}
-                            </span>
+                            <div className="flex items-center gap-2">
+                                <span className={`px-3 py-1 rounded-full text-xs font-black uppercase tracking-widest ${status.color}`}>
+                                    {status.label}
+                                </span>
+                                {isAdmin && (
+                                    <button
+                                        onClick={() => openEdit(t)}
+                                        title="Editar temporada"
+                                        className="p-2 rounded-full bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 transition-colors"
+                                    >
+                                        <Pencil className="w-3.5 h-3.5 text-zinc-500 dark:text-zinc-300" />
+                                    </button>
+                                )}
+                            </div>
                         </div>
                         
                         <div className="space-y-2">
@@ -243,6 +295,51 @@ export default function TemporadasPage() {
                         </div>
                         <button disabled={isSaving} type="submit" className={`w-full py-3 text-white rounded-xl font-bold hover:opacity-90 disabled:opacity-50 transition-all flex items-center justify-center ${actionModal.type === 'iniciar' ? 'bg-emerald-500' : 'bg-rose-500'}`}>
                             {isSaving ? <Loader2 className="w-5 h-5 animate-spin" /> : "Confirmar Acción"}
+                        </button>
+                    </form>
+                </motion.div>
+            </motion.div>
+        )}
+
+        {/* Editar Modal */}
+        {editModal && (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+                <motion.div initial={{ scale: 0.95 }} animate={{ scale: 1 }} exit={{ scale: 0.95 }} className="w-full max-w-md bg-white dark:bg-zinc-900 rounded-[2rem] p-8 shadow-2xl">
+                    <div className="flex justify-between items-center mb-6">
+                        <h2 className="text-xl font-black text-zinc-900 dark:text-white">Editar Temporada</h2>
+                        <button onClick={() => setEditModal(null)} className="p-2 bg-zinc-100 dark:bg-zinc-800 rounded-full hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors">
+                            <X className="w-5 h-5 text-zinc-500" />
+                        </button>
+                    </div>
+                    {error && (
+                        <div className="mb-6 p-3 rounded-xl bg-rose-500/10 text-rose-500 text-sm font-bold flex items-center gap-2">
+                            <AlertCircle className="w-4 h-4" /> {error}
+                        </div>
+                    )}
+                    <form onSubmit={handleSaveEdit} className="space-y-4">
+                        <div>
+                            <label className="text-xs font-black uppercase text-zinc-500 ml-1">Nombre</label>
+                            <input type="text" required value={editForm.nombre} onChange={e => setEditForm({ ...editForm, nombre: e.target.value })} className="w-full mt-1 p-3 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-primary" />
+                        </div>
+                        <div>
+                            <label className="text-xs font-black uppercase text-zinc-500 ml-1">Descripción</label>
+                            <textarea rows={3} value={editForm.descripcion} onChange={e => setEditForm({ ...editForm, descripcion: e.target.value })} className="w-full mt-1 p-3 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-primary" placeholder="Opcional..." />
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                            <div>
+                                <label className="text-xs font-black uppercase text-zinc-500 ml-1">Fecha inicio</label>
+                                <input type="date" value={editForm.fecha_inicio} onChange={e => setEditForm({ ...editForm, fecha_inicio: e.target.value })} className="w-full mt-1 p-3 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-primary" />
+                            </div>
+                            <div>
+                                <label className="text-xs font-black uppercase text-zinc-500 ml-1">Fecha fin</label>
+                                <input type="date" value={editForm.fecha_fin} onChange={e => setEditForm({ ...editForm, fecha_fin: e.target.value })} className="w-full mt-1 p-3 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-primary" />
+                            </div>
+                        </div>
+                        <p className="text-[11px] text-zinc-400 leading-relaxed">
+                            Estas fechas definen el rango que se usa para clasificar movimientos automáticamente en esta temporada. Déjalas vacías para quitar el límite correspondiente.
+                        </p>
+                        <button disabled={isSaving} type="submit" className="w-full mt-2 py-3 bg-primary text-white rounded-xl font-bold hover:opacity-90 disabled:opacity-50 transition-all flex items-center justify-center">
+                            {isSaving ? <Loader2 className="w-5 h-5 animate-spin" /> : "Guardar Cambios"}
                         </button>
                     </form>
                 </motion.div>
