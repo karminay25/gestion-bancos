@@ -5,6 +5,7 @@ import { Leaf, Plus, Play, Square, CalendarDays, Loader2, X, AlertCircle } from 
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
+import { isTemporadaActiva } from "@/lib/temporadas";
 
 export default function TemporadasPage() {
   const { isAdmin } = useAuth();
@@ -42,8 +43,11 @@ export default function TemporadasPage() {
   };
 
   const getStatus = (t: any) => {
+    // La fecha_fin puede definirse de antemano (para que la clasificacion
+    // automatica de movimientos futuros ya sepa donde termina la temporada)
+    // sin que eso la marque como "Finalizada" antes de que esa fecha llegue.
+    if (isTemporadaActiva(t)) return { label: "Activa", color: "bg-emerald-500 text-white", status: "activa" };
     if (t.fecha_fin) return { label: "Finalizada", color: "bg-zinc-500 text-white", status: "finalizada" };
-    if (t.fecha_inicio) return { label: "Activa", color: "bg-emerald-500 text-white", status: "activa" };
     return { label: "Programada", color: "bg-amber-500 text-white", status: "programada" };
   };
 

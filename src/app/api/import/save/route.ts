@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import crypto from 'crypto';
 import { cleanTerceroName } from '@/lib/nameCleaner';
+import { findTemporadaForFecha } from '@/lib/temporadas';
 
 export const dynamic = 'force-dynamic';
 
@@ -27,6 +28,13 @@ export async function POST(req: NextRequest) {
 
         // Movements are already in chronological order from the preview
         const chronologicalMovements = movements;
+
+        // La temporada de cada movimiento se determina por su propia fecha (un
+        // archivo importado puede abarcar mas de una temporada), no por un
+        // valor global fijo para todo el lote. El temporadaId elegido en el
+        // selector queda solo como respaldo para fechas que no caigan dentro
+        // de ninguna temporada definida.
+        const { data: temporadas } = await supabase.from('temporadas').select('id, fecha_inicio, fecha_fin');
 
         // Calculate running balance for banks that don't provide it (like Monex)
         let currentBalance: number | null = null;
@@ -85,7 +93,7 @@ export async function POST(req: NextRequest) {
                 tipo: m.tipo,
                 factura: factura || null,
                 centro_costo_id: m.centro_costo_id || centroCostoId || null,
-                temporada_id: temporadaId || null,
+                temporada_id: findTemporadaForFecha(m.fecha, temporadas || []) || temporadaId || null,
                 saldoo: saldoo
             };
         });

@@ -101,8 +101,14 @@ export async function POST(req: NextRequest) {
             { keywords: ['CFE'], ccName: 'LUZ' },
             { keywords: ['DISPERSION'], ccName: 'NOMINA' },
             { keywords: ['RADIO MOVIL DIPSA'], ccName: 'PRORRATEO' },
-            { keywords: ['TRASPASO'], ccName: 'TRASPASO' },
         ];
+
+        // "TRASPASO A TERCEROS" es un pago normal a un tercero (el banco solo usa
+        // esa leyenda genérica en vez del nombre del beneficiario) y NO debe
+        // tratarse como traspaso entre cuentas propias. Solo "TRASPASO ENTRE
+        // CUENTAS" y variantes sin "TERCEROS" (p. ej. "TRASPASO MONEX") cuentan
+        // como traspaso real.
+        const isRealTraspaso = (text: string) => text.includes('TRASPASO') && !text.includes('TERCEROS');
 
         // Coincidencia de palabra clave sobre el texto ya normalizado (mayúsculas, sin acentos).
         // Palabras cortas y riesgosas (<=4 letras: SAT, CFE, IMSS) exigen coincidencia de
@@ -126,8 +132,9 @@ export async function POST(req: NextRequest) {
             let centro_costo_id = null;
             let conceptoUpper = (m.concepto || '').toUpperCase();
 
-            // Auto-detect Traspasos
-            if (conceptoUpper.includes('TRASPASO')) {
+            // Auto-detect Traspasos (excluye "TRASPASO A TERCEROS", que es un Ingreso/Egreso normal)
+            const esTraspasoReal = isRealTraspaso(conceptoUpper);
+            if (esTraspasoReal) {
                 tipo = 'Traspaso';
                 // If it was parsed as Egreso, the money left, so the traspaso is outgoing (-)
                 if (m.tipo === 'Egreso') monto = -Math.abs(monto);
@@ -143,9 +150,17 @@ export async function POST(req: NextRequest) {
             let refNormal = removeAccents((m.referencia || '').toUpperCase());
             let nombreNormal = removeAccents((m.proveedor || m.descripcion || '').toUpperCase());
 
+            // Centro de Costo "TRASPASO": se asigna directo cuando es traspaso real
+            // entre cuentas propias. No pasa por las reglas genéricas de abajo porque
+            // el nombre "TRASPASO" haría match parcial también en "TRASPASO A TERCEROS".
+            if (esTraspasoReal && centrosCosto) {
+                const cc = centrosCosto.find(c => removeAccents(c.nombre.toUpperCase()) === 'TRASPASO');
+                if (cc) centro_costo_id = cc.id;
+            }
+
             // Auto-detect Centro de Costo
-            if (centrosCosto) {
-                // Priority keyword rules (gasolina/combustible, traspaso, etc.)
+            if (!esTraspasoReal && centrosCosto) {
+                // Priority keyword rules (gasolina/combustible, etc.)
                 for (const rule of PRIORITY_CC_RULES) {
                     const matches = rule.keywords.some(kw =>
                         keywordMatches(kw, conceptoNormal, refNormal, nombreNormal)
@@ -161,18 +176,22 @@ export async function POST(req: NextRequest) {
             }
 
             // Fallback: generic match against every cost center's own name
-            if (centrosCosto && !centro_costo_id) {
-                // We order CCs by length descending to match more specific names first
-                const sortedCCs = [...centrosCosto].sort((a, b) => b.nombre.length - a.nombre.length);
-                
+            if (!esTraspasoReal && centrosCosto && !centro_costo_id) {
+                // We order CCs by length descending to match more specific names first.
+                // Excluye el CC "TRASPASO": su nombre haría match parcial en textos como
+                // "TRASPASO A TERCEROS", que ya no cuentan como traspaso (ver esTraspasoReal arriba).
+                const sortedCCs = [...centrosCosto]
+                    .filter(c => removeAccents(c.nombre.toUpperCase()) !== 'TRASPASO')
+                    .sort((a, b) => b.nombre.length - a.nombre.length);
+
                 const escapeRegExp = (string: string) => string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                
+
                 for (const cc of sortedCCs) {
                     const ccNameRaw = cc.nombre.toUpperCase();
                     const ccName = removeAccents(ccNameRaw);
-                    
+
                     let isMatch = false;
-                    
+
                     if (ccName.length <= 4) {
                         // Use strict word boundaries \b to avoid "OBA" matching "RECIBIDOBAJIO"
                         const regex = new RegExp(`\\b${escapeRegExp(ccName)}\\b`);
@@ -182,7 +201,7 @@ export async function POST(req: NextRequest) {
                         // like "NOMINAS" or "ARANDANOS" by removing the strict \b
                         isMatch = conceptoNormal.includes(ccName) || refNormal.includes(ccName);
                     }
-                    
+
                     if (isMatch) {
                         centro_costo_id = cc.id;
                         break;
@@ -217,7 +236,7 @@ export async function POST(req: NextRequest) {
         // than .range() — .range() sends an HTTP "Range" header which the Next.js
         // dev server's fetch instrumentation fails to parse in this project
         // ("invalid type: unit value, expected usize"), crashing the route.
-        const existingMovements: { id: string; fecha: string; tipo: string; monto: number }[] = [];
+        const existingMovements: { id: string; fecha: string; tipo: string; monto: number; concepto: string | null }[] = [];
         {
             const PAGE_SIZE = 1000;
             let cursor: string | null = null;
@@ -227,7 +246,7 @@ export async function POST(req: NextRequest) {
                 const { data: page, error: pageError } = await withRetry(() => {
                     let pageQuery = supabase
                         .from('movimientos')
-                        .select('id, fecha, tipo, monto')
+                        .select('id, fecha, tipo, monto, concepto')
                         .eq('cuenta_id', cuentaId)
                         .order('id', { ascending: true })
                         .limit(PAGE_SIZE);
@@ -246,16 +265,21 @@ export async function POST(req: NextRequest) {
             }
         }
 
-        const dupKey = (fecha: string, tipo: string, monto: number | string) =>
-            `${fecha}|${tipo}|${Number(monto).toFixed(2)}`;
+        // fecha+tipo+monto por si solo no basta: no es raro que dos movimientos
+        // genuinamente distintos compartan esos tres datos el mismo dia (p. ej.
+        // varias recargas de TAG de $1,000 el mismo dia para choferes distintos).
+        // Se agrega el concepto (normalizado) a la huella para no marcar esos
+        // casos como falsos duplicados.
+        const dupKey = (fecha: string, tipo: string, monto: number | string, concepto: string | null | undefined) =>
+            `${fecha}|${tipo}|${Number(monto).toFixed(2)}|${(concepto || '').trim().toUpperCase()}`;
 
         const existingKeys = new Set(
-            (existingMovements || []).map(e => dupKey(e.fecha, e.tipo, e.monto))
+            (existingMovements || []).map(e => dupKey(e.fecha, e.tipo, e.monto, e.concepto))
         );
 
         const finalMovements = movementsWithAccounts.map(m => ({
             ...m,
-            isDuplicate: existingKeys.has(dupKey(m.fecha, m.tipo, m.monto))
+            isDuplicate: existingKeys.has(dupKey(m.fecha, m.tipo, m.monto, m.concepto))
         }));
 
         // Reverse to get Oldest First (BBVA comes newest-first; Monex and Bajio already oldest-first)

@@ -23,6 +23,7 @@ import {
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "@/lib/supabase";
 import { formatCostCenter, compareCostCenters } from "@/lib/costCenter";
+import { isTemporadaActiva, findTemporadaForFecha } from "@/lib/temporadas";
 
 const ARCHIVED_COST_CENTERS = new Set([
   'ACTIVO LOLA',
@@ -207,7 +208,7 @@ export function NewMovementForm({ onClose, onSuccess, initialTab = "manual", asP
       if (acc) setAccounts(acc);
       if (seas) {
         setSeasons(seas);
-        const activeSeason = seas.find((s: any) => s.fecha_inicio && !s.fecha_fin);
+        const activeSeason = seas.find((s: any) => isTemporadaActiva(s));
         if (activeSeason) {
           setGlobalSeasonId(activeSeason.id);
         }
@@ -264,10 +265,16 @@ export function NewMovementForm({ onClose, onSuccess, initialTab = "manual", asP
         finalMonto = Math.abs(finalMonto);
     }
 
+    // La temporada se determina automaticamente segun la fecha del movimiento
+    // (a que temporada le pertenece ese rango de fechas). El selector global
+    // solo se usa como respaldo cuando la fecha no cae dentro de ninguna
+    // temporada definida.
+    const autoTemporadaId = findTemporadaForFecha(formData.fecha, seasons) || globalSeasonId || null;
+
     try {
       const recordsToInsert = [{
           cuenta_id: currentAccount.id,
-          temporada_id: globalSeasonId || null,
+          temporada_id: autoTemporadaId,
           fecha: formData.fecha,
           tipo: formData.tipo,
           monto: finalMonto,
@@ -280,7 +287,7 @@ export function NewMovementForm({ onClose, onSuccess, initialTab = "manual", asP
       if (formData.tipo === 'Traspaso' && formData.destinationAccountId) {
           recordsToInsert.push({
               cuenta_id: formData.destinationAccountId,
-              temporada_id: globalSeasonId || null,
+              temporada_id: autoTemporadaId,
               fecha: formData.fecha,
               tipo: formData.tipo,
               monto: -finalMonto, // Opposite sign for the destination account

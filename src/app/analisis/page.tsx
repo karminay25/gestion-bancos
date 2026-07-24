@@ -12,6 +12,7 @@ import {
 } from "recharts";
 import { supabase } from "@/lib/supabase";
 import { formatCostCenter } from "@/lib/costCenter";
+import { isTemporadaActiva } from "@/lib/temporadas";
 import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, isWithinInterval, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
 
@@ -93,7 +94,7 @@ export default function AnalisisPage() {
       if (seasRes.data) {
         setSeasons(seasRes.data);
         // Auto-select active season
-        const active = seasRes.data.find((s: any) => s.fecha_inicio && !s.fecha_fin);
+        const active = seasRes.data.find((s: any) => isTemporadaActiva(s));
         if (active) setSelectedSeason(active.id.toString());
       }
       if (ccRes.data) setCostCenters(ccRes.data);
@@ -201,7 +202,7 @@ export default function AnalisisPage() {
     });
   }, [seasons, movements, selectedCurrency]);
 
-  const activeSeason = seasons.find(s => s.fecha_inicio && !s.fecha_fin);
+  const activeSeason = seasons.find(s => isTemporadaActiva(s));
 
   if (loading) return (
     <div className="flex flex-col items-center justify-center h-[80vh]">
@@ -231,7 +232,7 @@ export default function AnalisisPage() {
             <select value={selectedSeason} onChange={e => setSelectedSeason(e.target.value)} className="bg-transparent text-xs font-black uppercase text-zinc-600 dark:text-zinc-400 border-none focus:ring-0">
               <option value="all">Todas las Temporadas</option>
               {seasons.map(s => {
-                const isActive = s.fecha_inicio && !s.fecha_fin;
+                const isActive = isTemporadaActiva(s);
                 return <option key={s.id} value={s.id}>{s.nombre}{isActive ? ' ★' : ''}</option>;
               })}
             </select>
@@ -439,8 +440,8 @@ export default function AnalisisPage() {
               </thead>
               <tbody className="divide-y divide-zinc-50 dark:divide-zinc-900">
                 {seasonComparison.map(s => {
-                  const isActive = s.fecha_inicio && !s.fecha_fin;
-                  const isFin = !!s.fecha_fin;
+                  const isActive = isTemporadaActiva(s);
+                  const isFin = !isActive && !!s.fecha_fin;
                   return (
                     <tr key={s.id} className={`hover:bg-zinc-50/50 dark:hover:bg-zinc-900/50 transition-colors ${selectedSeason === s.id.toString() ? 'bg-primary/[0.03]' : ''}`}>
                       <td className="py-4 font-black text-zinc-900 dark:text-zinc-50 text-sm">{s.nombre}</td>

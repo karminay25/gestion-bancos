@@ -33,6 +33,7 @@ import { EditMovementModal } from "@/components/EditMovementModal";
 import { ExportExcelModal } from "@/components/ExportExcelModal";
 import { calculateAccountBalance, sortMovements } from "@/lib/balances";
 import { useAuth } from "@/context/AuthContext";
+import { isTemporadaActiva } from "@/lib/temporadas";
 
 // Helper to get Month Name in Spanish
 const getMonthName = (monthStr: string) => {
@@ -1005,7 +1006,7 @@ export default function MovimientosPage() {
                 >
                   <option value="all">Todas las Temporadas</option>
                   {seasons.map(s => {
-                    const isActive = s.fecha_inicio && !s.fecha_fin;
+                    const isActive = isTemporadaActiva(s);
                     return <option key={s.id} value={s.id}>{s.nombre}{isActive ? ' ★' : ''}</option>;
                   })}
                 </select>
@@ -1032,7 +1033,7 @@ export default function MovimientosPage() {
       {selectedSeason !== 'all' && (() => {
         const s = seasons.find(s => s.id.toString() === selectedSeason);
         if (!s) return null;
-        const isActive = s.fecha_inicio && !s.fecha_fin;
+        const isActive = isTemporadaActiva(s);
         return (
           <div className="flex items-center gap-3 p-4 rounded-2xl bg-primary/5 border border-primary/20">
             <Leaf className="w-5 h-5 text-primary" />
