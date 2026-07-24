@@ -58,6 +58,32 @@ export interface SyncResult {
     message: string;
 }
 
+// Sube el archivo real (XML o PDF) de una factura a Storage y actualiza el
+// registro en `facturas` para que apunte a esa ruta. Se usa tanto para
+// facturas nuevas como para "backfillear" facturas ya existentes que se
+// guardaron antes de que este archivo se conservara.
+async function uploadFacturaFile(uuid: string, tipo: 'xml' | 'pdf', content: Buffer): Promise<void> {
+    const path = `${uuid}.${tipo}`;
+    const contentType = tipo === 'pdf' ? 'application/pdf' : 'application/xml';
+    try {
+        const { error: upErr } = await supabase.storage.from('facturas').upload(path, content, {
+            contentType,
+            upsert: true,
+        });
+        if (upErr) {
+            console.error(`Error subiendo ${path} a Storage:`, upErr);
+            return;
+        }
+        const column = tipo === 'xml' ? 'archivo_xml' : 'archivo_pdf';
+        const { error: updErr } = await supabase.from('facturas').update({ [column]: path }).eq('uuid_sat', uuid);
+        if (updErr) {
+            console.error(`Error actualizando ${column} para ${uuid}:`, updErr);
+        }
+    } catch (e) {
+        console.error(`Excepcion subiendo ${path}:`, e);
+    }
+}
+
 export async function syncInvoicesFromEmail(): Promise<SyncResult> {
     // 1. Determine search start date dynamically based on latest invoice in DB
     let searchDate = 'Jan 1, 2026';
@@ -153,6 +179,15 @@ async function fetchFromAccount(config: any, searchDate: string): Promise<SyncRe
         let emailsScanned = 0;
         let isDone = false;
 
+        // Correlaciona el PDF de una factura con su XML cuando ambos vienen
+        // adjuntos en el mismo correo (mismo uid). Como las partes se
+        // descargan una por una y el orden entre XML y PDF no esta
+        // garantizado, se usan estos dos mapas para esperar el que falte:
+        // - uidToUuid: uid -> uuid_sat, una vez que su XML ya se proceso.
+        // - uidToPendingPdf: uid -> bytes del PDF, si llego antes que su XML.
+        const uidToUuid = new Map<number, string>();
+        const uidToPendingPdf = new Map<number, Buffer>();
+
         const safeReject = (err: any) => {
             if (isDone) return;
             isDone = true;
@@ -188,7 +223,7 @@ async function fetchFromAccount(config: any, searchDate: string): Promise<SyncRe
                     console.log(`Found ${results.length} potential messages. Checking structures...`);
                     
                     const f = imap.fetch(results, { struct: true });
-                    const partsToFetch: { uid: number, partID: string, encoding: string, filename: string, type: 'xml' | 'zip' }[] = [];
+                    const partsToFetch: { uid: number, partID: string, encoding: string, filename: string, type: 'xml' | 'zip' | 'pdf' }[] = [];
                     let processedStructs = 0;
 
                     f.on('message', (msg, seqno) => {
@@ -198,13 +233,13 @@ async function fetchFromAccount(config: any, searchDate: string): Promise<SyncRe
                                 const filename = part.disposition?.params?.filename || part.params?.name || part.params?.filename;
                                 if (!filename) return;
                                 const ext = filename.split('.').pop().toLowerCase();
-                                if (ext === 'xml' || ext === 'zip') {
+                                if (ext === 'xml' || ext === 'zip' || ext === 'pdf') {
                                     partsToFetch.push({
                                         uid: attrs.uid,
                                         partID: part.partID,
                                         encoding: part.encoding || 'base64',
                                         filename,
-                                        type: ext as 'xml' | 'zip'
+                                        type: ext as 'xml' | 'zip' | 'pdf'
                                     });
                                 }
                             });
@@ -262,21 +297,51 @@ async function fetchFromAccount(config: any, searchDate: string): Promise<SyncRe
                                             if (item.type === 'xml') {
                                                 xmlsFoundCount++;
                                                 const xmlString = content.toString('utf8');
-                                                const result = await processXML(xmlString, item.filename);
+                                                const { result, uuid } = await processXML(xmlString, item.filename);
                                                 if (result === 'new') newInvoicesCount++;
                                                 else if (result === 'exists') alreadyInDBCount++;
+                                                if (uuid) {
+                                                    uidToUuid.set(item.uid, uuid);
+                                                    const pendingPdf = uidToPendingPdf.get(item.uid);
+                                                    if (pendingPdf) {
+                                                        await uploadFacturaFile(uuid, 'pdf', pendingPdf);
+                                                        uidToPendingPdf.delete(item.uid);
+                                                    }
+                                                }
+                                            } else if (item.type === 'pdf') {
+                                                const pdfBuffer = Buffer.isBuffer(content) ? content : Buffer.from(content as string, 'binary');
+                                                const knownUuid = uidToUuid.get(item.uid);
+                                                if (knownUuid) {
+                                                    await uploadFacturaFile(knownUuid, 'pdf', pdfBuffer);
+                                                } else {
+                                                    // El XML del mismo correo todavia no se ha procesado; se
+                                                    // guarda en espera y se sube en cuanto se conozca su uuid.
+                                                    uidToPendingPdf.set(item.uid, pdfBuffer);
+                                                }
                                             } else if (item.type === 'zip') {
                                                 try {
                                                     const AdmZip = require('adm-zip');
                                                     const zip = new AdmZip(content as Buffer);
                                                     const zipEntries = zip.getEntries();
+                                                    const xmlUuidsInZip: string[] = [];
                                                     for (const zipEntry of zipEntries) {
                                                         if (zipEntry.entryName.toLowerCase().endsWith('.xml')) {
                                                             xmlsFoundCount++;
                                                             const xmlContent = zipEntry.getData().toString('utf8');
-                                                            const result = await processXML(xmlContent, zipEntry.entryName);
+                                                            const { result, uuid } = await processXML(xmlContent, zipEntry.entryName);
                                                             if (result === 'new') newInvoicesCount++;
                                                             else if (result === 'exists') alreadyInDBCount++;
+                                                            if (uuid) xmlUuidsInZip.push(uuid);
+                                                        }
+                                                    }
+                                                    // Solo se asocia el/los PDF del zip cuando hay exactamente un
+                                                    // XML dentro (caso comun de CFDI + representacion impresa); si
+                                                    // hay varios, no hay forma confiable de saber a cual pertenece.
+                                                    if (xmlUuidsInZip.length === 1) {
+                                                        for (const zipEntry of zipEntries) {
+                                                            if (zipEntry.entryName.toLowerCase().endsWith('.pdf')) {
+                                                                await uploadFacturaFile(xmlUuidsInZip[0], 'pdf', zipEntry.getData());
+                                                            }
                                                         }
                                                     }
                                                 } catch (zerr) {
@@ -338,26 +403,51 @@ function getAttr(node: any, attrName: string): any {
     return undefined;
 }
 
-async function processXML(xmlContent: string, filename: string): Promise<'new' | 'exists' | null> {
+async function processXML(xmlContent: string, filename: string): Promise<{ result: 'new' | 'exists' | null; uuid?: string }> {
     try {
         const jsonObj = xmlParser.parse(xmlContent);
         const comprobante = findNode(jsonObj, "Comprobante");
-        if (!comprobante) return null;
+        if (!comprobante) return { result: null };
 
         const timbre = findNode(findNode(comprobante, "Complemento"), "TimbreFiscalDigital");
         const uuid = getAttr(timbre, "UUID");
 
-        if (!uuid) return null;
+        if (!uuid) return { result: null };
+
+        console.log(`Procesando factura ${uuid} (adjunto original: ${filename})`);
+
+        // Sube el XML real a Storage sin importar si la factura es nueva o ya
+        // existia en la BD, para poder mostrarlo/descargarlo despues. Tambien
+        // rellena facturas antiguas que se guardaron antes de que este archivo
+        // se conservara (su archivo_xml quedo con el nombre crudo del adjunto).
+        // Se aisla en su propio try/catch: si Storage falla (red, permisos,
+        // etc.) no debe impedir que se guarden los datos de la factura, que
+        // es lo que ya funcionaba antes de este cambio.
+        const xmlPath = `${uuid}.xml`;
+        try {
+            const { error: xmlUploadError } = await supabase.storage.from('facturas').upload(xmlPath, Buffer.from(xmlContent, 'utf8'), {
+                contentType: 'application/xml',
+                upsert: true,
+            });
+            if (xmlUploadError) {
+                console.error(`No se pudo subir ${xmlPath} a Storage:`, xmlUploadError);
+            }
+        } catch (storageErr) {
+            console.error(`Excepcion subiendo ${xmlPath} a Storage:`, storageErr);
+        }
 
         // 1. QUICK CHECK: Does it already exist in DB?
         const { data: existing } = await supabase
             .from('facturas')
-            .select('id')
+            .select('id, archivo_xml')
             .eq('uuid_sat', uuid)
             .maybeSingle();
 
         if (existing) {
-            return 'exists'; // Already in DB
+            if (existing.archivo_xml !== xmlPath) {
+                await supabase.from('facturas').update({ archivo_xml: xmlPath }).eq('id', existing.id);
+            }
+            return { result: 'exists', uuid }; // Already in DB
         }
 
         const emisor = findNode(comprobante, "Emisor");
@@ -375,7 +465,7 @@ async function processXML(xmlContent: string, filename: string): Promise<'new' |
             moneda: getAttr(comprobante, "Moneda") || 'MXN',
             fecha_emision: getAttr(comprobante, "Fecha")?.split('T')[0],
             folio: getAttr(comprobante, "Folio"),
-            archivo_xml: filename,
+            archivo_xml: xmlPath,
             estado: 'PENDIENTE_VINCULO'
         };
 
@@ -384,13 +474,13 @@ async function processXML(xmlContent: string, filename: string): Promise<'new' |
             if (error.code !== '23505') { // Ignore unique constraint errors just in case
                 console.error('Error saving invoice metadata:', error);
             }
-            return null;
+            return { result: null };
         } else {
             console.log('--- NEW INVOICE SAVED:', uuid, '---');
-            return 'new';
+            return { result: 'new', uuid };
         }
     } catch (e) {
         console.error('Error parsing XML:', e);
-        return null;
+        return { result: null };
     }
 }

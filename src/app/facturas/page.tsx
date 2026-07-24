@@ -29,6 +29,7 @@ import { es } from "date-fns/locale";
 import { ManualLinkModal } from "@/components/ManualLinkModal";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/context/AuthContext";
+import toast from "react-hot-toast";
 
 const safeFormatDate = (dateStr: string, formatPattern: string, options?: any) => {
     try {
@@ -52,7 +53,7 @@ export default function FacturasPage() {
     const [selectedInvoice, setSelectedInvoice] = useState<any | null>(null);
     const [detailInvoice, setDetailInvoice] = useState<any | null>(null);
     const [copiedUuid, setCopiedUuid] = useState(false);
-    const [showPdf, setShowPdf] = useState(false);
+    const [openingFile, setOpeningFile] = useState<'xml' | 'pdf' | null>(null);
     
     const ITEMS_PER_PAGE = 20;
 
@@ -248,6 +249,23 @@ export default function FacturasPage() {
         navigator.clipboard.writeText(uuid);
         setCopiedUuid(true);
         setTimeout(() => setCopiedUuid(false), 2000);
+    };
+
+    const handleViewFile = async (uuidSat: string, tipo: 'xml' | 'pdf') => {
+        setOpeningFile(tipo);
+        try {
+            const res = await fetch(`/api/facturas/${uuidSat}/${tipo}`);
+            const data = await res.json();
+            if (!res.ok || !data.signedUrl) {
+                toast.error(data.error || `No se pudo abrir el ${tipo.toUpperCase()}`);
+                return;
+            }
+            window.open(data.signedUrl, '_blank');
+        } catch (e) {
+            toast.error(`No se pudo abrir el ${tipo.toUpperCase()}`);
+        } finally {
+            setOpeningFile(null);
+        }
     };
 
     // Helper for highlighting text matches
@@ -706,24 +724,33 @@ export default function FacturasPage() {
                                             <p className="font-mono text-zinc-300 dark:text-zinc-400 dark:text-zinc-450 bg-zinc-100 dark:bg-zinc-950 p-2 rounded-lg border border-zinc-100 dark:border-zinc-900 mt-1 select-all">{detailInvoice.uuid_sat}</p>
                                         </div>
                                         <div className="col-span-2">
-                                            <p className="text-zinc-300 dark:text-zinc-400">Archivo XML Sincronizado</p>
-                                            <div className="flex items-center gap-2 mt-1.5 text-zinc-300 dark:text-zinc-400 dark:text-zinc-300 dark:text-zinc-400">
+                                            <p className="text-zinc-300 dark:text-zinc-400">Archivos de la Factura</p>
+                                            <div className="flex items-center gap-2 mt-1.5 text-zinc-400">
                                                 <FileCode className="w-4 h-4 text-primary" />
-                                                <span className="font-mono text-[11px] truncate max-w-[280px]">{detailInvoice.archivo_xml}</span>
+                                                <span className="font-mono text-[11px] truncate max-w-[280px]">{detailInvoice.archivo_xml || 'Sin archivo guardado'}</span>
                                             </div>
-                                            <button onClick={() => window.open(`/api/facturas/${detailInvoice.uuid_sat}/pdf`, '_blank')} className="mt-2 px-3 py-1 bg-primary-500 text-white rounded hover:bg-primary-600 transition-colors">
-                                                Ver PDF
-                                            </button>
-                                            {showPdf && (
-                                                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-70">
-                                                  <div className="bg-white dark:bg-zinc-900 p-4 rounded-lg max-w-3xl w-full max-h-[90vh] overflow-auto">
-                                                    <div className="flex justify-between items-center mb-2">
-                                                      <h3 className="text-lg font-bold">PDF del Archivo</h3>
-                                                      <button onClick={() => setShowPdf(false)} className="text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200">✕</button>
-                                                    </div>
-                                                    <iframe src={detailInvoice.archivo_xml} className="w-full h-[80vh]" />
-                                                  </div>
-                                                </div>
+                                            <div className="flex gap-2 mt-2">
+                                                <button
+                                                    onClick={() => handleViewFile(detailInvoice.uuid_sat, 'xml')}
+                                                    disabled={openingFile !== null}
+                                                    className="px-3 py-1.5 bg-primary text-white rounded-lg text-xs font-bold hover:opacity-90 disabled:opacity-50 transition-colors flex items-center gap-1.5"
+                                                >
+                                                    {openingFile === 'xml' ? <Loader2 className="w-3 h-3 animate-spin" /> : <FileCode className="w-3 h-3" />}
+                                                    Ver XML
+                                                </button>
+                                                <button
+                                                    onClick={() => handleViewFile(detailInvoice.uuid_sat, 'pdf')}
+                                                    disabled={openingFile !== null}
+                                                    className="px-3 py-1.5 bg-zinc-700 text-white rounded-lg text-xs font-bold hover:opacity-90 disabled:opacity-50 transition-colors flex items-center gap-1.5"
+                                                >
+                                                    {openingFile === 'pdf' ? <Loader2 className="w-3 h-3 animate-spin" /> : <Eye className="w-3 h-3" />}
+                                                    Ver PDF
+                                                </button>
+                                            </div>
+                                            {!detailInvoice.archivo_xml && (
+                                                <p className="text-[10px] text-amber-500 font-medium mt-1.5">
+                                                    Esta factura se sincronizó antes de que el sistema guardara los archivos originales; puede que no estén disponibles.
+                                                </p>
                                             )}
                                         </div>
                                     </div>
