@@ -231,43 +231,38 @@ export default function Dashboard() {
 
       {/* TC & Final Result */}
       <div className={cn("grid grid-cols-1 md:grid-cols-2 gap-6 items-end", isCaptureMode && "gap-3")}>
-        <div className={cn("bg-white dark:bg-zinc-900 p-4 rounded-[2rem] border border-zinc-200 dark:border-zinc-800 shadow-sm", isCaptureMode && "p-3 rounded-[1rem]")}>
-          <div className="flex items-center justify-between mb-3">
+        <div className={cn("bg-white dark:bg-zinc-900 p-3 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-sm", isCaptureMode && "p-2 rounded-[1rem]")}>
+          <div className="flex items-center justify-between mb-1.5">
             <div>
-              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-400 dark:text-zinc-500 mb-1">Configuración Monetaria</p>
-              <h4 className="text-base font-black text-zinc-900 dark:text-zinc-50">Tipo de Cambio (TC)</h4>
+              <p className="text-[9px] font-black uppercase tracking-[0.2em] text-zinc-400 dark:text-zinc-500">Configuración Monetaria</p>
+              <h4 className="text-sm font-black text-zinc-900 dark:text-zinc-50">Tipo de Cambio (TC)</h4>
             </div>
-            <div className="bg-primary/10 p-2 rounded-2xl">
-              <TrendingUp className="w-5 h-5 text-primary" />
+            <div className="bg-primary/10 p-1.5 rounded-xl">
+              <TrendingUp className="w-4 h-4 text-primary" />
             </div>
           </div>
           <div className="relative">
-            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400 font-bold">$</span>
+            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400 font-bold text-sm">$</span>
             <input
               type="number"
               value={tc}
               onChange={(e) => setTc(parseFloat(e.target.value) || 0)}
               step="0.01"
-              className={cn("w-full bg-zinc-50 dark:bg-zinc-800 border-none rounded-2xl py-2.5 pl-10 pr-4 text-xl font-black text-zinc-900 dark:text-zinc-50 focus:ring-2 focus:ring-primary transition-all text-right", isCaptureMode && "py-2 text-xl")}
+              className={cn("w-full bg-zinc-50 dark:bg-zinc-800 border-none rounded-xl py-1.5 pl-10 pr-4 text-base font-black text-zinc-900 dark:text-zinc-50 focus:ring-2 focus:ring-primary transition-all text-right", isCaptureMode && "py-1 text-base")}
             />
-            <p className="mt-1.5 text-[10px] text-zinc-500 font-black uppercase tracking-widest italic text-center">
-              * Ajusta este valor para ver la liquidez proyectada en pesos
-            </p>
           </div>
         </div>
 
-        <div className={cn("bg-yellow-400 p-4 rounded-[2rem] shadow-2xl shadow-yellow-400/30 flex flex-col justify-between h-full group hover:scale-[1.02] transition-all duration-500 border-4 border-yellow-500/20", isCaptureMode && "p-3 rounded-[1rem]")}>
+        <div className={cn("bg-yellow-400 p-3 rounded-2xl shadow-2xl shadow-yellow-400/30 flex flex-col justify-between h-full group hover:scale-[1.02] transition-all duration-500 border-4 border-yellow-500/20", isCaptureMode && "p-2 rounded-[1rem]")}>
           <div>
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-yellow-900/60">Balance Global Consolidado</p>
-            </div>
-            <h4 className="text-xs font-black text-yellow-900 uppercase tracking-widest">Total Pesos (MXN + USD@TC)</h4>
+            <p className="text-[9px] font-black uppercase tracking-[0.2em] text-yellow-900/60">Balance Global Consolidado</p>
+            <h4 className="text-[11px] font-black text-yellow-900 uppercase tracking-widest">Total Pesos (MXN + USD@TC)</h4>
           </div>
-          <div className="mt-2 flex items-baseline justify-end gap-2 flex-wrap">
-            <h2 className="text-xl sm:text-2xl lg:text-3xl font-black text-yellow-950 tracking-tighter text-right break-all">
+          <div className="mt-1 flex items-baseline justify-end gap-2 flex-wrap">
+            <h2 className="text-lg sm:text-xl lg:text-2xl font-black text-yellow-950 tracking-tighter text-right break-all">
               ${totalConsolidadoPesos.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
             </h2>
-            <span className="text-sm sm:text-base font-black text-yellow-900/40">MXN</span>
+            <span className="text-xs sm:text-sm font-black text-yellow-900/40">MXN</span>
           </div>
         </div>
       </div>
