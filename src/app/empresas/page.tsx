@@ -7,7 +7,7 @@ export default function EmpresasPage() {
   const companies = [
     { id: 1, name: 'LOLA BERRIES', full: 'LOLA BERRIES SPR DE RL DE CV', Location: 'Sayula, Jalisco' },
     { id: 2, name: 'BOSBES BERRIES', full: 'BOSBES BERRIES SPR DE RL DE CV', Location: 'Rancho Estación' },
-    { id: 3, name: 'OBA BERRIES', full: 'OBA BERRIES S.A. DE C.V.', Location: 'Ciudad Guzmán' },
+    { id: 3, name: 'AGRÍCOLA OBA ORGÁNICA', full: 'AGRÍCOLA OBA ORGÁNICA', Location: 'Ciudad Guzmán' },
   ];
 
   return (
