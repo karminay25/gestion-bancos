@@ -48,33 +48,33 @@ export async function POST(req: NextRequest) {
         }
 
         const buffer = Buffer.from(await file.arrayBuffer());
-        const fileName = file.name.toUpperCase();
-        
-        let result: { detectedCompany: any; movements: any[]; suggestedInitialBalance?: number | null } = { detectedCompany: null as any, movements: [] as any[] };
+
+        // El formato del banco se decide por la cuenta que el usuario ya
+        // seleccionó en el formulario (Empresa + Banco + Cuenta), NO por el
+        // nombre del archivo. Adivinar por el nombre fallaba en cuanto alguien
+        // renombraba el Excel (p. ej. "BOSBES JUL 26 MONEX USD.xlsx" en vez del
+        // nombre de fábrica "MovimientosContrato..."), cayendo en el intento
+        // equivocado de parser y arruinando las fechas.
+        const { data: cuentaInfo, error: cuentaError } = await withRetry(() =>
+            supabase.from('cuentas_bancarias').select('banco').eq('id', cuentaId).single()
+        );
+        if (cuentaError || !cuentaInfo) {
+            return NextResponse.json({ error: 'No se pudo identificar el banco de la cuenta seleccionada' }, { status: 400 });
+        }
+        const banco = (cuentaInfo.banco || '').toUpperCase();
+
+        let result: { detectedCompany: any; movements: any[]; suggestedInitialBalance?: number | null };
         let isBBVA = false;
 
-        // Auto-detect bank format
-        if (fileName.includes('RSM')) {
+        if (banco.includes('BBVA')) {
             result = parseBBVA(buffer);
             isBBVA = true;
-        } else if (fileName.includes('MOVIMIENTOSCONTRATO')) {
+        } else if (banco.includes('MONEX')) {
             result = parseMonex(buffer);
-        } else if (fileName.includes('BAJIO')) {
+        } else if (banco.includes('BAJIO')) {
             result = parseBajio(buffer);
         } else {
-            // Fallback trial
-            try {
-                result = parseBBVA(buffer);
-                if (result.movements.length === 0) throw new Error();
-                isBBVA = true;
-            } catch {
-                try {
-                    result = parseMonex(buffer);
-                    if (result.movements.length === 0) throw new Error();
-                } catch {
-                    result = parseBajio(buffer);
-                }
-            }
+            return NextResponse.json({ error: `No hay un lector de Excel configurado para el banco "${cuentaInfo.banco}" de esta cuenta.` }, { status: 400 });
         }
 
         const { movements: allMovements } = result;
