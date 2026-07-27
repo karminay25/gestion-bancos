@@ -171,7 +171,7 @@ export default function Dashboard() {
 
       {/* Main Table Container */}
       <div className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-[2rem] shadow-sm overflow-hidden relative">
-        <div className={cn("p-6 border-b border-zinc-100 dark:border-zinc-800 flex items-center justify-between bg-zinc-50/50 dark:bg-zinc-900/50", isCaptureMode && "p-2")}>
+        <div className={cn("sticky top-0 z-10 p-6 border-b border-zinc-100 dark:border-zinc-800 flex items-center justify-between bg-zinc-50/95 dark:bg-zinc-900/95 backdrop-blur-sm", isCaptureMode && "p-2")}>
           <h3 className="text-xl font-black text-zinc-900 dark:text-zinc-50 uppercase tracking-tighter">Saldos Bancos Diarios</h3>
           <div className="flex items-center gap-4 text-xs font-black uppercase tracking-widest text-zinc-400">
             <span className="w-32 text-center text-emerald-600">Pesos (MXN)</span>
