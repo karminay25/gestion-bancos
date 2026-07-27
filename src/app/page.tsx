@@ -263,11 +263,11 @@ export default function Dashboard() {
             </div>
             <h4 className="text-sm font-black text-yellow-900 uppercase tracking-widest">Total Pesos (MXN + USD@TC)</h4>
           </div>
-          <div className="mt-4 flex items-baseline justify-end gap-2">
-            <h2 className="text-4xl font-black text-yellow-950 tracking-tighter">
+          <div className="mt-4 flex items-baseline justify-end gap-2 flex-wrap">
+            <h2 className="text-2xl sm:text-3xl lg:text-4xl font-black text-yellow-950 tracking-tighter text-right break-all">
               ${totalConsolidadoPesos.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
             </h2>
-            <span className="text-lg font-black text-yellow-900/40">MXN</span>
+            <span className="text-base sm:text-lg font-black text-yellow-900/40">MXN</span>
           </div>
         </div>
       </div>
