@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
   Search,
@@ -84,6 +84,7 @@ function AccountLedger({ account, movements, costCenters, terceros, onRefresh, i
     const [isUpdating, setIsUpdating] = useState<string | null>(null); // For loading state per row
     const [showAddCC, setShowAddCC] = useState(false);
     const [newCCName, setNewCCName] = useState("");
+    const monthsScrollRef = useRef<HTMLDivElement>(null);
     const [savingCC, setSavingCC] = useState(false);
     const [manuallyActivatedCCNames, setManuallyActivatedCCNames] = useState<Set<string>>(new Set());
     const [editingMovement, setEditingMovement] = useState<any | null>(null);
@@ -241,6 +242,16 @@ function AccountLedger({ account, movements, costCenters, terceros, onRefresh, i
             setSelectedMonth(availableMonths[availableMonths.length - 1]); // Last month with any data
         }
     }, [availableMonths, selectedMonth]);
+
+    // Al cargar (o cuando cambia el mes seleccionado), desplaza la barra de
+    // meses hasta el final para que el mes activo (normalmente el más
+    // reciente) sea visible sin que el usuario tenga que arrastrar la barrita
+    // manualmente cada vez.
+    useEffect(() => {
+        if (monthsScrollRef.current) {
+            monthsScrollRef.current.scrollLeft = monthsScrollRef.current.scrollWidth;
+        }
+    }, [selectedMonth]);
 
     // Reset pagination when filter or month changes
     useEffect(() => {
@@ -418,7 +429,7 @@ function AccountLedger({ account, movements, costCenters, terceros, onRefresh, i
             </div>
 
             {/* Month Picker Navigation */}
-            <div className="flex items-center gap-2 overflow-x-auto pb-2 no-scrollbar">
+            <div ref={monthsScrollRef} className="flex items-center gap-2 overflow-x-auto pb-2 no-scrollbar">
                 {availableMonths.map(month => (
                     <button
                         key={month}
