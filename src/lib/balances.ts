@@ -64,20 +64,24 @@ export function calculateAccountBalance(movements: Movement[]): number {
         }
     }
 
+    // Ingreso/Egreso store an unsigned monto (sign derived from tipo); Traspaso stores
+    // a signed monto where the sign itself encodes direction (+ in, - out).
+    const delta = (m: Movement): number => {
+        const amt = parseFloat(m.monto?.toString().replace(/,/g, '') || '0');
+        if (m.tipo === 'Egreso') return -Math.abs(amt);
+        if (m.tipo === 'Ingreso') return Math.abs(amt);
+        return amt;
+    };
+
     // 3. If no base balance found, sum everything from zero
     if (latestBaseIdx === -1) {
-        return sorted.reduce((sum, m) => {
-            const amt = parseFloat(m.monto?.toString().replace(/,/g, '') || '0');
-            return m.tipo === 'Ingreso' ? sum + amt : sum - amt;
-        }, 0);
+        return sorted.reduce((sum, m) => sum + delta(m), 0);
     }
 
     // 4. Calculate from base balance forward
     let current = baseBalance;
     for (let i = latestBaseIdx + 1; i < sorted.length; i++) {
-        const m = sorted[i];
-        const amt = parseFloat(m.monto?.toString().replace(/,/g, '') || '0');
-        current = m.tipo === 'Ingreso' ? current + amt : current - amt;
+        current += delta(sorted[i]);
     }
 
     return current;
