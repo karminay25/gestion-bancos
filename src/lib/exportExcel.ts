@@ -22,7 +22,7 @@ export function filterMovements(movements: any[], filters: ExportFilters) {
 }
 
 // Excel no permite: \ / ? * [ ] en nombres de hoja, y limita a 31 caracteres.
-function sanitizeSheetName(name: string, used: Set<string>): string {
+export function sanitizeSheetName(name: string, used: Set<string>): string {
     let clean = name.replace(/[\\/?*[\]]/g, "").trim().slice(0, 31) || "Cuenta";
     let candidate = clean;
     let n = 2;
@@ -35,7 +35,7 @@ function sanitizeSheetName(name: string, used: Set<string>): string {
     return candidate;
 }
 
-function ingresoEgresoDeMovimiento(m: any) {
+export function ingresoEgresoDeMovimiento(m: any) {
     const monto = parseFloat(m.monto);
     if (m.tipo === "Ingreso") return { ingreso: monto, egreso: null };
     if (m.tipo === "Egreso") return { ingreso: null, egreso: monto };
@@ -43,7 +43,7 @@ function ingresoEgresoDeMovimiento(m: any) {
     return monto >= 0 ? { ingreso: monto, egreso: null } : { ingreso: null, egreso: Math.abs(monto) };
 }
 
-function sortAsc(movements: any[]) {
+export function sortAsc(movements: any[]) {
     return [...movements].sort((a, b) => {
         const cmp = a.fecha.localeCompare(b.fecha);
         if (cmp !== 0) return cmp;

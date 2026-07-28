@@ -4,6 +4,7 @@ import { useState } from "react";
 import { X, Download, FileSpreadsheet, Loader2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { buildExportWorkbook, ExportFilters } from "@/lib/exportExcel";
+import { buildResumenWorkbook, buildFilterLabel } from "@/lib/exportResumenExcel";
 import * as XLSX from "xlsx";
 
 interface ExportExcelModalProps {
@@ -21,24 +22,42 @@ export function ExportExcelModal({ onClose, movements, accounts, companies, seas
     const [fechaHasta, setFechaHasta] = useState("");
     const [temporadaId, setTemporadaId] = useState("all");
     const [centroCostoId, setCentroCostoId] = useState("all");
-    const [modo, setModo] = useState<"general" | "consolidado">("general");
+    const [modo, setModo] = useState<"general" | "consolidado" | "resumen">("general");
     const [exporting, setExporting] = useState(false);
 
-    const handleExport = () => {
+    const handleExport = async () => {
         setExporting(true);
         try {
-            const filters: ExportFilters = { empresaId, fechaDesde, fechaHasta, temporadaId, centroCostoId, modo };
-            const wb = buildExportWorkbook(movements, accounts, filters);
+            const filters: ExportFilters = { empresaId, fechaDesde, fechaHasta, temporadaId, centroCostoId, modo: modo === "resumen" ? "consolidado" : modo };
 
             const parts = ["Reporte_Bancos"];
+            if (modo === "resumen") parts.push("Resumen");
             if (empresaId !== "all") {
                 const emp = companies.find(c => c.id.toString() === empresaId);
                 if (emp) parts.push(emp.codigo);
             }
             if (fechaDesde || fechaHasta) parts.push(`${fechaDesde || "inicio"}_a_${fechaHasta || "hoy"}`);
             parts.push(new Date().toISOString().split("T")[0]);
+            const filename = `${parts.join("_")}.xlsx`;
 
-            XLSX.writeFile(wb, `${parts.join("_")}.xlsx`);
+            if (modo === "resumen") {
+                const filterLabel = buildFilterLabel(filters, companies, seasons, costCenters);
+                const wb = buildResumenWorkbook(movements, costCenters, filters, filterLabel);
+                const buffer = await wb.xlsx.writeBuffer();
+                const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                URL.revokeObjectURL(url);
+            } else {
+                const wb = buildExportWorkbook(movements, accounts, filters);
+                XLSX.writeFile(wb, filename);
+            }
+
             onClose();
         } finally {
             setExporting(false);
@@ -127,7 +146,7 @@ export function ExportExcelModal({ onClose, movements, accounts, companies, seas
 
                         <div className="space-y-2">
                             <label className="text-xs font-bold text-zinc-700 dark:text-zinc-300 uppercase tracking-wider">Formato</label>
-                            <div className="grid grid-cols-2 gap-3">
+                            <div className="grid grid-cols-1 gap-3">
                                 <button
                                     type="button"
                                     onClick={() => setModo("general")}
@@ -143,6 +162,14 @@ export function ExportExcelModal({ onClose, movements, accounts, companies, seas
                                 >
                                     <p className="text-sm font-bold text-zinc-900 dark:text-zinc-50">Consolidado</p>
                                     <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5">Una sola hoja con todo junto</p>
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setModo("resumen")}
+                                    className={`p-4 rounded-2xl border-2 text-left transition-all ${modo === "resumen" ? "border-primary bg-primary/5" : "border-zinc-100 dark:border-zinc-800"}`}
+                                >
+                                    <p className="text-sm font-bold text-zinc-900 dark:text-zinc-50">Resumen Ingresos / Egresos</p>
+                                    <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5">Tablas separadas con colores y totales: una hoja general y una hoja por centro de costo</p>
                                 </button>
                             </div>
                         </div>
