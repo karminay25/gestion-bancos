@@ -40,9 +40,12 @@ export function EditMovementModal({ movement, onClose, onSuccess }: EditMovement
       }
 
       // Convert monto depending on tipo
+      // Ingreso/Egreso always store a positive monto (sign is derived from tipo elsewhere,
+      // matching the convention used by bank importers and NewMovementForm). Only Traspaso
+      // embeds direction in the sign.
       let finalMonto = parsedMonto;
       if (formData.tipo === 'Egreso') {
-          finalMonto = -Math.abs(parsedMonto);
+          finalMonto = Math.abs(parsedMonto);
       } else if (formData.tipo === 'Ingreso') {
           finalMonto = Math.abs(parsedMonto);
       } else if (formData.tipo === 'Traspaso') {

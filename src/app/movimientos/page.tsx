@@ -651,7 +651,7 @@ function AccountLedger({ account, movements, costCenters, terceros, onRefresh, i
                                 </td>
                                 <td className="px-5 py-5 text-center">
                                     {move.tipo === 'Egreso' ? (
-                                        <span className="text-xs font-black text-rose-600 dark:text-rose-500">${parseFloat(move.monto).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                        <span className="text-xs font-black text-rose-600 dark:text-rose-500">${Math.abs(parseFloat(move.monto)).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                                     ) : move.tipo === 'Traspaso' && parseFloat(move.monto) < 0 ? (
                                         <span className="text-xs font-black text-blue-600">${Math.abs(parseFloat(move.monto)).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                                     ) : '-'}
