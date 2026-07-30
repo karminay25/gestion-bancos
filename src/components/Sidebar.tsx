@@ -20,7 +20,8 @@ import {
   BookUser,
   FileText,
   Sun,
-  Moon
+  Moon,
+  Clock
 } from "lucide-react";
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
@@ -33,6 +34,7 @@ const navItems = [
   { name: "Dashboard", href: "/", icon: LayoutDashboard },
   { name: "Análisis", href: "/analisis", icon: BarChart3 },
   { name: "Movimientos", href: "/movimientos", icon: History },
+  { name: "Recientes", href: "/recientes", icon: Clock },
   { name: "Cuentas", href: "/cuentas", icon: Wallet },
   { name: "Temporadas", href: "/temporadas", icon: Leaf },
   { name: "Terceros", href: "/terceros", icon: BookUser },
