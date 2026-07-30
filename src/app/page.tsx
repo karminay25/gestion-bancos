@@ -1,37 +1,31 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
-import { 
-  TrendingUp, 
-  Wallet, 
-  ArrowUpRight, 
+import {
+  TrendingUp,
+  Wallet,
+  ArrowUpRight,
   ArrowDownRight,
   Building2,
-  Plus,
-  Loader2,
-  FileSpreadsheet
+  Loader2
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
-import { NewMovementForm } from "@/components/NewMovementForm";
-import { useAuth } from "@/context/AuthContext";
 import { calculateAccountBalance, sortMovements } from "@/lib/balances";
 
 function cn(...inputs: ClassValue[]) {
     return twMerge(clsx(inputs));
 }
 
+// La captura manual y la importación de Excel viven en Movimientos ->
+// "Nueva Captura"; el Dashboard queda solo de consulta.
 export default function Dashboard() {
-  const { isAdmin } = useAuth();
   const [loading, setLoading] = useState(true);
   const [companies, setCompanies] = useState<any[]>([]);
   const [accounts, setAccounts] = useState<any[]>([]);
   const [allMovements, setAllMovements] = useState<any[]>([]);
   const [tc, setTc] = useState<number>(17.50);
-  const [showCapture, setShowCapture] = useState(false);
-  const [captureMode, setCaptureMode] = useState<"manual" | "import">("manual");
-  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
     async function fetchData() {
@@ -81,7 +75,7 @@ export default function Dashboard() {
       setLoading(false);
     }
     fetchData();
-  }, [refreshKey]);
+  }, []);
 
   const bankSummary = useMemo(() => {
     return companies.map(company => {
@@ -149,23 +143,6 @@ export default function Dashboard() {
           >
             {isCaptureMode ? "Salir de Captura" : "Modo Captura"}
           </button>
-          {!isCaptureMode && isAdmin && (
-            <>
-              <button
-                onClick={() => { setCaptureMode("import"); setShowCapture(true); }}
-                className="flex items-center gap-2 rounded-2xl bg-primary px-6 py-3 text-sm font-bold text-zinc-50 shadow-xl shadow-primary/20 hover:scale-[1.02] transition-all active:scale-95"
-              >
-                <FileSpreadsheet className="w-5 h-5" />
-                Importar Excel Bancario
-              </button>
-              <button
-                onClick={() => { setCaptureMode("manual"); setShowCapture(true); }}
-                className="flex items-center gap-2 rounded-2xl bg-zinc-100 dark:bg-zinc-800 px-6 py-3 text-sm font-bold text-zinc-900 dark:text-zinc-50 hover:bg-zinc-200 transition-all active:scale-95">
-                <Plus className="w-5 h-5" />
-                Captura Manual
-              </button>
-            </>
-          )}
         </div>
       </div>
 
@@ -267,14 +244,6 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Capture Modal (Unified) */}
-      {showCapture && (
-        <NewMovementForm 
-            onClose={() => setShowCapture(false)} 
-            initialTab={captureMode}
-            onSuccess={() => setRefreshKey(prev => prev + 1)} 
-        />
-      )}
     </div>
   );
 }
