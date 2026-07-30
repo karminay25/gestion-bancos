@@ -57,7 +57,8 @@ export default function AnalisisPage() {
   const [selectedCompany, setSelectedCompany] = useState<string>("all");
   const [selectedSeason, setSelectedSeason] = useState<string>("all");
   const [selectedCC, setSelectedCC] = useState<string>("all");
-  const [selectedCurrency, setSelectedCurrency] = useState<"MXN" | "USD">("MXN");
+  const [selectedCurrency, setSelectedCurrency] = useState<"MXN" | "USD" | "ALL">("MXN");
+  const [tc, setTc] = useState<number>(17.50);
   const [timeRange, setTimeRange] = useState<"week"|"month"|"year"|"all">("all");
   const [isMounted, setIsMounted] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
@@ -133,12 +134,19 @@ export default function AnalisisPage() {
     setIsMounted(true);
   }, []);
 
+  // In "ALL" mode we combine both currencies, converting USD to MXN at the manual TC.
+  const convertToDisplay = (m: any) => {
+    const amt = parseFloat(m.monto);
+    if (selectedCurrency === "ALL" && m.cuentas_bancarias?.moneda === "USD") return amt * tc;
+    return amt;
+  };
+
   const filteredData = useMemo(() => {
     let data = movements;
-    
-    // Filter strictly by the selected currency
-    data = data.filter(m => m.cuentas_bancarias?.moneda === selectedCurrency);
-    
+
+    // Filter by the selected currency, unless viewing the combined total ("ALL")
+    if (selectedCurrency !== "ALL") data = data.filter(m => m.cuentas_bancarias?.moneda === selectedCurrency);
+
     if (selectedCompany !== "all") data = data.filter(m => m.cuentas_bancarias?.empresas?.codigo === selectedCompany);
     if (selectedSeason !== "all") data = data.filter(m => m.temporada_id?.toString() === selectedSeason);
     if (selectedCC !== "all") data = data.filter(m => m.centro_costo_id?.toString() === selectedCC);
@@ -154,36 +162,44 @@ export default function AnalisisPage() {
   }, [movements, selectedCompany, selectedSeason, selectedCC, timeRange, selectedCurrency]);
 
   const stats = useMemo(() => {
-    const totalIncome = filteredData.filter(m => m.tipo === 'Ingreso').reduce((s, m) => s + parseFloat(m.monto), 0);
-    const totalExpense = filteredData.filter(m => m.tipo === 'Egreso').reduce((s, m) => s + parseFloat(m.monto), 0);
+    const totalIncome = filteredData.filter(m => m.tipo === 'Ingreso').reduce((s, m) => s + convertToDisplay(m), 0);
+    const totalExpense = filteredData.filter(m => m.tipo === 'Egreso').reduce((s, m) => s + convertToDisplay(m), 0);
+    // Raw (unconverted) breakdown by native currency, used to show "MXN + USD" detail in combined mode.
+    const totalIncomeMXNraw = filteredData.filter(m => m.tipo === 'Ingreso' && m.cuentas_bancarias?.moneda === 'MXN').reduce((s, m) => s + parseFloat(m.monto), 0);
+    const totalIncomeUSDraw = filteredData.filter(m => m.tipo === 'Ingreso' && m.cuentas_bancarias?.moneda === 'USD').reduce((s, m) => s + parseFloat(m.monto), 0);
+    const totalExpenseMXNraw = filteredData.filter(m => m.tipo === 'Egreso' && m.cuentas_bancarias?.moneda === 'MXN').reduce((s, m) => s + parseFloat(m.monto), 0);
+    const totalExpenseUSDraw = filteredData.filter(m => m.tipo === 'Egreso' && m.cuentas_bancarias?.moneda === 'USD').reduce((s, m) => s + parseFloat(m.monto), 0);
     const byCC = filteredData.filter(m => m.tipo === 'Egreso').reduce((acc: any, m) => {
       const name = m.centros_costo ? formatCostCenter(m.centros_costo) : "Sin Clasificar";
-      acc[name] = (acc[name] || 0) + parseFloat(m.monto);
+      acc[name] = (acc[name] || 0) + convertToDisplay(m);
       return acc;
     }, {});
     const pieCC = Object.entries(byCC).map(([name, value]) => ({ name, value }));
     const byEmpresa = filteredData.filter(m => m.tipo === 'Egreso').reduce((acc: any, m) => {
       const name = m.cuentas_bancarias?.empresas?.codigo || "S/E";
-      acc[name] = (acc[name] || 0) + parseFloat(m.monto);
+      acc[name] = (acc[name] || 0) + convertToDisplay(m);
       return acc;
     }, {});
     const pieEmpresa = Object.entries(byEmpresa).map(([name, value]) => ({ name, value }));
     const byProvider = filteredData.filter(m => m.tipo === 'Egreso').reduce((acc: any, m) => {
       const name = m.nombre_tercero || "S/N";
-      acc[name] = (acc[name] || 0) + parseFloat(m.monto);
+      acc[name] = (acc[name] || 0) + convertToDisplay(m);
       return acc;
     }, {});
     const barProviders = Object.entries(byProvider).map(([name, value]) => ({ name, value: value as number })).sort((a, b) => b.value - a.value).slice(0, 10);
     const byDate = filteredData.reduce((acc: any, m) => {
       const date = m.fecha;
       if (!acc[date]) acc[date] = { date, income: 0, expense: 0 };
-      if (m.tipo === 'Ingreso') acc[date].income += parseFloat(m.monto);
-      else acc[date].expense += parseFloat(m.monto);
+      if (m.tipo === 'Ingreso') acc[date].income += convertToDisplay(m);
+      else acc[date].expense += convertToDisplay(m);
       return acc;
     }, {});
     const trendData = Object.values(byDate).sort((a: any, b: any) => a.date.localeCompare(b.date));
-    return { totalIncome, totalExpense, pieCC, pieEmpresa, barProviders, trendData, count: filteredData.length };
-  }, [filteredData]);
+    return {
+      totalIncome, totalExpense, pieCC, pieEmpresa, barProviders, trendData, count: filteredData.length,
+      totalIncomeMXNraw, totalIncomeUSDraw, totalExpenseMXNraw, totalExpenseUSDraw
+    };
+  }, [filteredData, selectedCurrency, tc]);
 
   const paginatedMovements = useMemo(() => {
     const start = (currentPage - 1) * ITEMS_PER_PAGE;
@@ -195,12 +211,12 @@ export default function AnalisisPage() {
   // Temporada comparison table
   const seasonComparison = useMemo(() => {
     return seasons.map(s => {
-      const movs = movements.filter(m => m.temporada_id?.toString() === s.id.toString() && m.cuentas_bancarias?.moneda === selectedCurrency);
-      const income = movs.filter(m => m.tipo === 'Ingreso').reduce((a, m) => a + parseFloat(m.monto), 0);
-      const expense = movs.filter(m => m.tipo === 'Egreso').reduce((a, m) => a + parseFloat(m.monto), 0);
+      const movs = movements.filter(m => m.temporada_id?.toString() === s.id.toString() && (selectedCurrency === "ALL" || m.cuentas_bancarias?.moneda === selectedCurrency));
+      const income = movs.filter(m => m.tipo === 'Ingreso').reduce((a, m) => a + convertToDisplay(m), 0);
+      const expense = movs.filter(m => m.tipo === 'Egreso').reduce((a, m) => a + convertToDisplay(m), 0);
       return { ...s, income, expense, net: income - expense, count: movs.length };
     });
-  }, [seasons, movements, selectedCurrency]);
+  }, [seasons, movements, selectedCurrency, tc]);
 
   const activeSeason = seasons.find(s => isTemporadaActiva(s));
 
@@ -248,11 +264,26 @@ export default function AnalisisPage() {
           </div>
           <div className="flex items-center gap-2 px-4 border-r border-zinc-200 dark:border-zinc-800">
             <Filter className="w-4 h-4 text-zinc-400" />
-            <select value={selectedCurrency} onChange={e => setSelectedCurrency(e.target.value as "MXN" | "USD")} className="bg-transparent text-xs font-black uppercase text-zinc-600 dark:text-zinc-400 border-none focus:ring-0">
+            <select value={selectedCurrency} onChange={e => setSelectedCurrency(e.target.value as "MXN" | "USD" | "ALL")} className="bg-transparent text-xs font-black uppercase text-zinc-600 dark:text-zinc-400 border-none focus:ring-0">
               <option value="MXN">Moneda: MXN</option>
               <option value="USD">Moneda: USD</option>
+              <option value="ALL">Ambas (Consolidado)</option>
             </select>
           </div>
+          {selectedCurrency === "ALL" && (
+            <div className="flex items-center gap-2 px-4 border-r border-zinc-200 dark:border-zinc-800">
+              <span className="text-[10px] font-black uppercase text-zinc-400 tracking-widest">TC</span>
+              <span className="text-xs font-bold text-zinc-400">$</span>
+              <input
+                type="number"
+                value={tc}
+                onChange={e => setTc(parseFloat(e.target.value) || 0)}
+                step="0.01"
+                title="Tipo de cambio USD → MXN usado para consolidar ambas monedas"
+                className="w-16 bg-transparent text-xs font-black text-zinc-600 dark:text-zinc-400 border-none focus:ring-0 p-0"
+              />
+            </div>
+          )}
           <div className="flex p-1 bg-white/50 dark:bg-black/20 rounded-xl">
             {(['week','month','year','all'] as const).map(r => (
               <button key={r} onClick={() => setTimeRange(r)} className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${timeRange === r ? "bg-primary text-white shadow-lg" : "text-zinc-500 hover:text-zinc-300"}`}>
@@ -274,9 +305,30 @@ export default function AnalisisPage() {
 
       {/* 4 Metric Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <MetricCard title="Ingresos Totales" value={stats.totalIncome} icon={<ArrowUpRight className="text-emerald-500" />} color="emerald" currency={selectedCurrency} />
-        <MetricCard title="Egresos Totales" value={stats.totalExpense} icon={<ArrowDownRight className="text-rose-500" />} color="rose" currency={selectedCurrency} />
-        <MetricCard title="Cash Flow Neto" value={stats.totalIncome - stats.totalExpense} icon={<TrendingUp className="text-primary" />} color="primary" currency={selectedCurrency} />
+        <MetricCard
+          title="Ingresos Totales"
+          value={stats.totalIncome}
+          icon={<ArrowUpRight className="text-emerald-500" />}
+          color="emerald"
+          currency={selectedCurrency === "ALL" ? "MXN" : selectedCurrency}
+          subtitle={selectedCurrency === "ALL" ? `MXN $${stats.totalIncomeMXNraw.toLocaleString('es-MX',{minimumFractionDigits:0})} + USD $${stats.totalIncomeUSDraw.toLocaleString('es-MX',{minimumFractionDigits:0})} × ${tc}` : undefined}
+        />
+        <MetricCard
+          title="Egresos Totales"
+          value={stats.totalExpense}
+          icon={<ArrowDownRight className="text-rose-500" />}
+          color="rose"
+          currency={selectedCurrency === "ALL" ? "MXN" : selectedCurrency}
+          subtitle={selectedCurrency === "ALL" ? `MXN $${stats.totalExpenseMXNraw.toLocaleString('es-MX',{minimumFractionDigits:0})} + USD $${stats.totalExpenseUSDraw.toLocaleString('es-MX',{minimumFractionDigits:0})} × ${tc}` : undefined}
+        />
+        <MetricCard
+          title="Cash Flow Neto"
+          value={stats.totalIncome - stats.totalExpense}
+          icon={<TrendingUp className="text-primary" />}
+          color="primary"
+          currency={selectedCurrency === "ALL" ? "MXN" : selectedCurrency}
+          subtitle={selectedCurrency === "ALL" ? "Consolidado a MXN con el TC configurado" : undefined}
+        />
         <div className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 p-8 rounded-[2.5rem] relative overflow-hidden group">
           <div className="flex items-center justify-between mb-4">
             <p className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-300 dark:text-zinc-400">Movimientos</p>
@@ -572,7 +624,7 @@ export default function AnalisisPage() {
   );
 }
 
-function MetricCard({ title, value, icon, color, currency }: { title: string, value: number, icon: any, color: string, currency: string }) {
+function MetricCard({ title, value, icon, color, currency, subtitle }: { title: string, value: number, icon: any, color: string, currency: string, subtitle?: string }) {
   const isNegative = value < 0;
   return (
     <div className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 p-8 rounded-[2.5rem] relative overflow-hidden group">
@@ -587,6 +639,9 @@ function MetricCard({ title, value, icon, color, currency }: { title: string, va
         </h2>
         <span className="text-xs font-black text-zinc-400 uppercase tracking-widest">{currency}</span>
       </div>
+      {subtitle && (
+        <p className="text-[10px] text-zinc-400 dark:text-zinc-500 font-bold mt-2 truncate" title={subtitle}>{subtitle}</p>
+      )}
     </div>
   );
 }

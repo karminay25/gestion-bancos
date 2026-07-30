@@ -263,6 +263,11 @@ export function NewMovementForm({ onClose, onSuccess, initialTab = "manual", asP
         finalMonto = -Math.abs(finalMonto);
     } else if (formData.tipo === 'Traspaso' && formData.traspasoType === 'in') {
         finalMonto = Math.abs(finalMonto);
+    } else {
+        // Ingreso y Egreso guardan el monto SIN signo (la dirección la da el
+        // tipo). Si se capturara en negativo, el saldo se autocorregía pero los
+        // totales de Análisis lo restaban en vez de sumarlo.
+        finalMonto = Math.abs(finalMonto);
     }
 
     // La temporada se determina automaticamente segun la fecha del movimiento
@@ -661,7 +666,7 @@ export function NewMovementForm({ onClose, onSuccess, initialTab = "manual", asP
                             <FormField label="Monto">
                                 <div className="relative">
                                     <span className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500 font-bold pointer-events-none">$</span>
-                                    <input type="number" step="0.01" value={formData.monto} onChange={e => setFormData({...formData, monto: e.target.value})} className="input-custom-dark text-lg font-black" style={{ paddingLeft: '2.25rem' }} required />
+                                    <input type="number" step="0.01" min="0" value={formData.monto} onChange={e => setFormData({...formData, monto: e.target.value})} className="input-custom-dark text-lg font-black" style={{ paddingLeft: '2.25rem' }} required />
                                 </div>
                             </FormField>
                             <FormField label="Factura">

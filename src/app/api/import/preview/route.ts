@@ -85,6 +85,34 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: 'No se encontraron movimientos en el archivo. Verifica que sea un Excel bancario válido.' }, { status: 400 });
         }
 
+        // Chequeo de cordura: si el archivo no corresponde al banco de la cuenta
+        // elegida, el lector igual "encuentra" filas pero interpreta columnas que
+        // no son (números de referencia como importes, contadores como fechas).
+        // El resultado son fechas de 1900 o montos de cientos de millones, que
+        // antes se importaban en silencio. Mejor detenerse y avisar.
+        const AÑO_MIN = 2000;
+        const AÑO_MAX = new Date().getFullYear() + 1;
+        const MONTO_ABSURDO = 50_000_000; // ningún movimiento real de estas cuentas se acerca
+
+        const fueraDeRango = allMovements.filter(m => {
+            const año = parseInt(String(m.fecha).slice(0, 4), 10);
+            return !Number.isFinite(año) || año < AÑO_MIN || año > AÑO_MAX;
+        });
+        const montosAbsurdos = allMovements.filter(m => Math.abs(Number(m.monto) || 0) > MONTO_ABSURDO);
+
+        if (fueraDeRango.length > 0 || montosAbsurdos.length > 0) {
+            const motivos: string[] = [];
+            if (fueraDeRango.length > 0) {
+                motivos.push(`${fueraDeRango.length} movimiento(s) con fechas fuera de rango (ej. ${fueraDeRango[0].fecha})`);
+            }
+            if (montosAbsurdos.length > 0) {
+                motivos.push(`${montosAbsurdos.length} movimiento(s) con importes desproporcionados (ej. ${Number(montosAbsurdos[0].monto).toLocaleString('es-MX')})`);
+            }
+            return NextResponse.json({
+                error: `El archivo no parece corresponder a una cuenta de ${cuentaInfo.banco}: ${motivos.join(' y ')}. Verifica que la cuenta seleccionada sea la correcta para este Excel.`
+            }, { status: 400 });
+        }
+
         // Fetch centros de costo for auto-classification
         console.time('[Preview] centros_costo fetch');
         const { data: centrosCosto } = await withRetry(() => supabase.from('centros_costo').select('id, nombre'));

@@ -58,9 +58,15 @@ export function calculateAccountBalance(movements: Movement[]): number {
         }
 
         if (val !== null && val !== undefined && val !== '') {
-            latestBaseIdx = i;
-            baseBalance = typeof val === 'string' ? parseFloat(val.replace(/,/g, '')) : parseFloat(String(val));
-            if (!isNaN(baseBalance)) break;
+            const parsed = typeof val === 'string' ? parseFloat(val.replace(/,/g, '')) : parseFloat(String(val));
+            // Un saldo ilegible (texto como "N/A") se ignora y se sigue buscando
+            // hacia atrás. Antes se tomaba como base igualmente y el NaN se
+            // propagaba, dejando el saldo de TODA la cuenta en NaN.
+            if (!isNaN(parsed)) {
+                latestBaseIdx = i;
+                baseBalance = parsed;
+                break;
+            }
         }
     }
 

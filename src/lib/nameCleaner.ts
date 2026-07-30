@@ -42,8 +42,19 @@ export function cleanTerceroName(rawName: string): string {
         'DEVOLUCION'
     ];
 
+    // "SPEI RECIBIDO" viene pegado al banco emisor (SPEI RECIBIDOBANORTE). Se
+    // cubre cualquier banco, no solo los listados abajo. Solo aplica a la forma
+    // PEGADA: si viene separado por espacio, esa palabra es el beneficiario y no
+    // debe borrarse.
+    cleaned = cleaned.replace(/^\s*SPEI\s+RECIBIDO[A-Z]*\s*/, '');
+
+    // Los prefijos se anclan al inicio (^) y exigen límite de palabra (\b) para
+    // no mutilar nombres legítimos que empiezan con esas letras: sin el \b,
+    // "TRASPASOS LOGISTICOS SA" quedaba como "S LOGISTICOS SA" y
+    // "DEVOLUCIONES DEL NORTE" como "ES DEL NORTE".
+    const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     for (const prefix of genericPrefixes) {
-        cleaned = cleaned.replace(new RegExp(prefix, 'g'), '');
+        cleaned = cleaned.replace(new RegExp(`^\\s*${escapeRegExp(prefix)}\\b\\s*`), '');
     }
 
     // 4. Fechas basura como "DEL 01MAR26 AL 31MAR26"
