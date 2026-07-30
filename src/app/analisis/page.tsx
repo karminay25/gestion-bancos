@@ -174,13 +174,19 @@ export default function AnalisisPage() {
       acc[name] = (acc[name] || 0) + convertToDisplay(m);
       return acc;
     }, {});
-    const pieCC = Object.entries(byCC).map(([name, value]) => ({ name, value }));
+    // De mayor a menor, para que la gráfica y la lista de abajo coincidan y lo
+    // más relevante quede primero.
+    const pieCC = Object.entries(byCC)
+      .map(([name, value]) => ({ name, value: value as number }))
+      .sort((a, b) => b.value - a.value);
     const byEmpresa = filteredData.filter(m => m.tipo === 'Egreso').reduce((acc: any, m) => {
       const name = m.cuentas_bancarias?.empresas?.codigo || "S/E";
       acc[name] = (acc[name] || 0) + convertToDisplay(m);
       return acc;
     }, {});
-    const pieEmpresa = Object.entries(byEmpresa).map(([name, value]) => ({ name, value }));
+    const pieEmpresa = Object.entries(byEmpresa)
+      .map(([name, value]) => ({ name, value: value as number }))
+      .sort((a, b) => b.value - a.value);
     const byProvider = filteredData.filter(m => m.tipo === 'Egreso').reduce((acc: any, m) => {
       const name = m.nombre_tercero || "S/N";
       acc[name] = (acc[name] || 0) + convertToDisplay(m);
@@ -363,14 +369,35 @@ export default function AnalisisPage() {
               </ResponsiveContainer>
             )}
           </div>
-          <div className="grid grid-cols-2 gap-3 mt-4">
-            {stats.pieCC.slice(0,6).map((entry, i) => (
-              <div key={entry.name} className="flex items-center gap-2">
-                <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: COLORS[i % COLORS.length] }} />
-                <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-tighter truncate">{entry.name}</span>
-                <span className="text-[10px] font-black text-zinc-700 dark:text-zinc-300 ml-auto">${(entry.value as number).toLocaleString('es-MX',{minimumFractionDigits:0})}</span>
-              </div>
-            ))}
+          {/* Se listan TODOS los centros de costo (antes solo salían 6, y ni
+              siquiera los mayores). Con scroll para no estirar la tarjeta. */}
+          <div className="mt-4 pt-4 border-t border-zinc-100 dark:border-zinc-800">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-[9px] font-black uppercase tracking-widest text-zinc-400">
+                {stats.pieCC.length} {stats.pieCC.length === 1 ? 'centro de costo' : 'centros de costo'}
+              </p>
+              <p className="text-[9px] font-black uppercase tracking-widest text-zinc-400">
+                Total ${stats.totalExpense.toLocaleString('es-MX', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+              </p>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2 max-h-56 overflow-y-auto pr-1">
+              {stats.pieCC.map((entry, i) => {
+                const pct = stats.totalExpense > 0 ? (entry.value / stats.totalExpense) * 100 : 0;
+                return (
+                  <div key={entry.name} className="flex items-center gap-2 py-0.5" title={`${entry.name}: $${entry.value.toLocaleString('es-MX', { minimumFractionDigits: 2 })} (${pct.toFixed(1)}%)`}>
+                    <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: COLORS[i % COLORS.length] }} />
+                    <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-tighter truncate">{entry.name}</span>
+                    <span className="text-[10px] font-black text-zinc-700 dark:text-zinc-300 ml-auto whitespace-nowrap">
+                      ${entry.value.toLocaleString('es-MX', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                    </span>
+                    <span className="text-[9px] font-bold text-zinc-400 w-10 text-right whitespace-nowrap">{pct.toFixed(1)}%</span>
+                  </div>
+                );
+              })}
+              {stats.pieCC.length === 0 && (
+                <p className="text-[10px] text-zinc-400 italic col-span-full">Sin egresos en el periodo seleccionado.</p>
+              )}
+            </div>
           </div>
         </div>
 
@@ -395,14 +422,33 @@ export default function AnalisisPage() {
               </ResponsiveContainer>
             )}
           </div>
-          <div className="grid grid-cols-2 gap-3 mt-4">
-            {stats.pieEmpresa.map((entry, i) => (
-              <div key={entry.name} className="flex items-center gap-2">
-                <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: COLORS[i % COLORS.length] }} />
-                <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-tighter">{entry.name}</span>
-                <span className="text-[10px] font-black text-zinc-700 dark:text-zinc-300 ml-auto">${(entry.value as number).toLocaleString('es-MX',{minimumFractionDigits:0})}</span>
-              </div>
-            ))}
+          <div className="mt-4 pt-4 border-t border-zinc-100 dark:border-zinc-800">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-[9px] font-black uppercase tracking-widest text-zinc-400">
+                {stats.pieEmpresa.length} {stats.pieEmpresa.length === 1 ? 'empresa' : 'empresas'}
+              </p>
+              <p className="text-[9px] font-black uppercase tracking-widest text-zinc-400">
+                Total ${stats.totalExpense.toLocaleString('es-MX', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+              </p>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2">
+              {stats.pieEmpresa.map((entry, i) => {
+                const pct = stats.totalExpense > 0 ? (entry.value / stats.totalExpense) * 100 : 0;
+                return (
+                  <div key={entry.name} className="flex items-center gap-2 py-0.5" title={`${entry.name}: $${entry.value.toLocaleString('es-MX', { minimumFractionDigits: 2 })} (${pct.toFixed(1)}%)`}>
+                    <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: COLORS[i % COLORS.length] }} />
+                    <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-tighter truncate">{entry.name}</span>
+                    <span className="text-[10px] font-black text-zinc-700 dark:text-zinc-300 ml-auto whitespace-nowrap">
+                      ${entry.value.toLocaleString('es-MX', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                    </span>
+                    <span className="text-[9px] font-bold text-zinc-400 w-10 text-right whitespace-nowrap">{pct.toFixed(1)}%</span>
+                  </div>
+                );
+              })}
+              {stats.pieEmpresa.length === 0 && (
+                <p className="text-[10px] text-zinc-400 italic col-span-full">Sin egresos en el periodo seleccionado.</p>
+              )}
+            </div>
           </div>
         </div>
       </div>
