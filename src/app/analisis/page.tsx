@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
-import { 
-  BarChart3, PieChart as PieChartIcon, TrendingUp, Calendar,
+import {
+  PieChart as PieChartIcon, TrendingUp,
   Building2, Users, Filter, ArrowUpRight, ArrowDownRight,
-  Loader2, CalendarDays, Leaf, Hash, Tag
+  Loader2, Leaf, Hash, Tag
 } from "lucide-react";
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -13,7 +13,7 @@ import {
 import { supabase } from "@/lib/supabase";
 import { formatCostCenter } from "@/lib/costCenter";
 import { isTemporadaActiva, formatFechaLocal } from "@/lib/temporadas";
-import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, isWithinInterval, parseISO } from "date-fns";
+import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, isWithinInterval } from "date-fns";
 import { es } from "date-fns/locale";
 
 const COLORS = ["#6366f1","#10b981","#f59e0b","#ec4899","#8b5cf6","#06b6d4","#f43f5e","#84cc16"];
@@ -61,8 +61,6 @@ export default function AnalisisPage() {
   const [tc, setTc] = useState<number>(17.50);
   const [timeRange, setTimeRange] = useState<"week"|"month"|"year"|"all">("all");
   const [isMounted, setIsMounted] = useState(false);
-  const [currentPage, setCurrentPage] = useState(1);
-  const ITEMS_PER_PAGE = 20;
   const [manuallyActivatedCCNames, setManuallyActivatedCCNames] = useState<Set<string>>(new Set());
 
   useEffect(() => {
@@ -75,10 +73,6 @@ export default function AnalisisPage() {
       console.error('Error loading activated CCs:', e);
     }
   }, []);
-
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [selectedCompany, selectedSeason, selectedCC, selectedCurrency, timeRange]);
 
   useEffect(() => {
     async function fetchData() {
@@ -206,13 +200,6 @@ export default function AnalisisPage() {
       totalIncomeMXNraw, totalIncomeUSDraw, totalExpenseMXNraw, totalExpenseUSDraw
     };
   }, [filteredData, selectedCurrency, tc]);
-
-  const paginatedMovements = useMemo(() => {
-    const start = (currentPage - 1) * ITEMS_PER_PAGE;
-    return filteredData.slice(start, start + ITEMS_PER_PAGE);
-  }, [filteredData, currentPage]);
-
-  const totalPages = Math.ceil(filteredData.length / ITEMS_PER_PAGE);
 
   // Temporada comparison table
   const seasonComparison = useMemo(() => {
@@ -561,111 +548,6 @@ export default function AnalisisPage() {
         </div>
       )}
 
-      {/* Consultas y Detalle de Movimientos */}
-      <div className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-[2.5rem] p-8 shadow-sm space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h3 className="text-xl font-black text-zinc-900 dark:text-zinc-50 uppercase tracking-tighter">Consulta de Movimientos</h3>
-            <p className="text-xs text-zinc-500 font-bold uppercase mt-1">
-              {selectedCC !== "all" 
-                ? `Mostrando movimientos del Centro de Costo: ${formatCostCenter(costCenters.find(cc => cc.id.toString() === selectedCC))}`
-                : "Listado general de movimientos filtrados"
-              }
-            </p>
-          </div>
-          <span className="px-3 py-1 rounded-full bg-zinc-100 dark:bg-zinc-800 text-[10px] font-black uppercase text-zinc-500 tracking-wider">
-            {filteredData.length} Registros
-          </span>
-        </div>
-
-        <div className="overflow-x-auto rounded-2xl border border-zinc-100 dark:border-zinc-800">
-          <table className="w-full text-left">
-            <thead>
-              <tr className="bg-zinc-50/50 dark:bg-zinc-900/50 border-b border-zinc-100 dark:border-zinc-800">
-                <th className="px-5 py-4 text-[9px] font-black uppercase tracking-widest text-zinc-400">Fecha</th>
-                <th className="px-5 py-4 text-[9px] font-black uppercase tracking-widest text-zinc-400">Empresa</th>
-                <th className="px-5 py-4 text-[9px] font-black uppercase tracking-widest text-zinc-400">Banco/Cuenta</th>
-                <th className="px-5 py-4 text-[9px] font-black uppercase tracking-widest text-zinc-400">Tercero</th>
-                <th className="px-5 py-4 text-[9px] font-black uppercase tracking-widest text-zinc-400">Concepto</th>
-                <th className="px-5 py-4 text-[9px] font-black uppercase tracking-widest text-zinc-400">C. Costo</th>
-                <th className="px-5 py-4 text-[9px] font-black uppercase tracking-widest text-zinc-400 text-right">Monto</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-zinc-50 dark:divide-zinc-900 text-xs">
-              {paginatedMovements.map((move: any) => {
-                const isEgreso = move.tipo === 'Egreso';
-                const isTraspaso = move.tipo === 'Traspaso';
-                const amt = parseFloat(move.monto);
-                const isTraspasoOut = isTraspaso && amt < 0;
-                return (
-                  <tr key={move.id} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-900/50 transition-colors">
-                    <td className="px-5 py-4 font-bold text-zinc-500 dark:text-zinc-300 whitespace-nowrap">
-                      {move.fecha.split('-').reverse().join('/')}
-                    </td>
-                    <td className="px-5 py-4 font-black uppercase text-zinc-900 dark:text-zinc-50">
-                      {move.cuentas_bancarias?.empresas?.codigo || 'N/A'}
-                    </td>
-                    <td className="px-5 py-4 text-zinc-500 dark:text-zinc-400">
-                      {move.cuentas_bancarias?.banco} ({move.cuentas_bancarias?.moneda})
-                    </td>
-                    <td className="px-5 py-4 font-bold text-zinc-900 dark:text-zinc-200">
-                      {move.nombre_tercero || '—'}
-                    </td>
-                    <td className="px-5 py-4 text-zinc-500 dark:text-zinc-400 truncate max-w-[220px]" title={move.concepto}>
-                      {move.concepto || '—'}
-                    </td>
-                    <td className="px-5 py-4">
-                      <span className="px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-600 dark:text-amber-400 text-[10px] font-bold">
-                        {move.centros_costo ? formatCostCenter(move.centros_costo) : 'Gral'}
-                      </span>
-                    </td>
-                    <td className={`px-5 py-4 text-right font-black text-sm ${isEgreso ? 'text-rose-500' : isTraspaso ? 'text-blue-500' : 'text-emerald-500'}`}>
-                      {isEgreso || isTraspasoOut ? '-' : '+'}${Math.abs(amt).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
-                    </td>
-                  </tr>
-                );
-              })}
-              {paginatedMovements.length === 0 && (
-                <tr>
-                  <td colSpan={7} className="text-center py-10 text-zinc-400 italic">
-                    No se encontraron movimientos con los filtros aplicados.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Pagination Footer */}
-        {totalPages > 1 && (
-          <div className="flex items-center justify-between pt-4 border-t border-zinc-100 dark:border-zinc-800">
-            <p className="text-[10px] font-black uppercase text-zinc-400 tracking-widest">
-              Mostrando {((currentPage - 1) * ITEMS_PER_PAGE) + 1} - {Math.min(currentPage * ITEMS_PER_PAGE, filteredData.length)} de {filteredData.length}
-            </p>
-            <div className="flex items-center gap-2">
-              <button 
-                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                disabled={currentPage === 1}
-                className="p-2 rounded-xl bg-white border border-zinc-200 text-zinc-600 disabled:opacity-30 dark:bg-zinc-900 dark:border-zinc-800 dark:text-zinc-400 transition-all hover:border-primary/50"
-              >
-                &larr;
-              </button>
-              <div className="flex items-center gap-1 font-black text-[11px] text-zinc-900 dark:text-zinc-50 px-3">
-                <span>{currentPage}</span>
-                <span className="text-zinc-300">/</span>
-                <span className="text-zinc-400 dark:text-zinc-300">{totalPages}</span>
-              </div>
-              <button 
-                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                disabled={currentPage === totalPages}
-                className="p-2 rounded-xl bg-white border border-zinc-200 text-zinc-600 disabled:opacity-30 dark:bg-zinc-900 dark:border-zinc-800 dark:text-zinc-400 transition-all hover:border-primary/50"
-              >
-                &rarr;
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
     </div>
   );
 }
