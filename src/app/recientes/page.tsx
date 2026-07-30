@@ -5,9 +5,10 @@
 // fecha del movimiento. No modifica ni elimina nada.
 
 import { useEffect, useState, useMemo } from "react";
+import Link from "next/link";
 import {
-  Clock, Loader2, Upload, Hash, Calendar, ChevronDown,
-  ArrowUpRight, ArrowDownRight, ArrowLeftRight, Inbox
+  Clock, Loader2, Upload, Hash, Calendar, ChevronDown, Filter, Wallet,
+  ArrowUpRight, ArrowDownRight, ArrowLeftRight, Inbox, ExternalLink
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { supabase } from "@/lib/supabase";
@@ -91,19 +92,71 @@ export default function RecientesPage() {
   const [limite, setLimite] = useState(PAGINA);
   const [totales, setTotales] = useState({ hoy: 0, semana: 0, total: 0 });
 
-  // Conteos para las tarjetas de resumen (consultas de solo conteo, muy ligeras)
+  // Filtros de empresa y cuenta
+  const [empresas, setEmpresas] = useState<any[]>([]);
+  const [cuentas, setCuentas] = useState<any[]>([]);
+  const [empresaId, setEmpresaId] = useState<string>("todas");
+  const [cuentaId, setCuentaId] = useState<string>("todas");
+
   useEffect(() => {
     (async () => {
-      const [hoy, semana, total] = await Promise.all([
-        supabase.from("movimientos").select("id", { count: "exact", head: true }).gte("created_at", desdeHaceDias(0)),
-        supabase.from("movimientos").select("id", { count: "exact", head: true }).gte("created_at", desdeHaceDias(7)),
-        supabase.from("movimientos").select("id", { count: "exact", head: true }),
+      const [emp, cta] = await Promise.all([
+        supabase.from("empresas").select("id, codigo, nombre_completo").order("codigo"),
+        supabase.from("cuentas_bancarias").select("id, banco, moneda, descripcion, empresa_id"),
       ]);
-      setTotales({ hoy: hoy.count || 0, semana: semana.count || 0, total: total.count || 0 });
+      setEmpresas(emp.data || []);
+      setCuentas(cta.data || []);
     })();
   }, []);
 
+  // Cuentas visibles según la empresa elegida
+  const cuentasDisponibles = useMemo(() => {
+    if (empresaId === "todas") return cuentas;
+    return cuentas.filter(c => String(c.empresa_id) === empresaId);
+  }, [cuentas, empresaId]);
+
+  // Si la cuenta seleccionada ya no pertenece a la empresa elegida, se limpia
   useEffect(() => {
+    if (cuentaId !== "todas" && !cuentasDisponibles.some(c => String(c.id) === cuentaId)) {
+      setCuentaId("todas");
+    }
+  }, [cuentasDisponibles, cuentaId]);
+
+  // Ids de cuenta que aplican al filtro actual (null = sin filtrar)
+  const cuentaIdsFiltro = useMemo<string[] | null>(() => {
+    if (cuentaId !== "todas") return [cuentaId];
+    if (empresaId !== "todas") return cuentasDisponibles.map(c => String(c.id));
+    return null;
+  }, [cuentaId, empresaId, cuentasDisponibles]);
+
+  const hayFiltro = empresaId !== "todas" || cuentaId !== "todas";
+
+  // Con un filtro activo hay que esperar a que carguen las cuentas, si no se
+  // consultaría con una lista de ids vacía y no saldría nada.
+  const filtroListo = empresaId === "todas" || cuentas.length > 0;
+
+  // Aplica el filtro de cuentas a cualquier consulta
+  const conFiltroCuentas = (q: any) => (cuentaIdsFiltro ? q.in("cuenta_id", cuentaIdsFiltro) : q);
+
+  // Conteos para las tarjetas de resumen (consultas de solo conteo, muy ligeras)
+  useEffect(() => {
+    if (!filtroListo) return;
+    let cancelado = false;
+    (async () => {
+      const base = () => supabase.from("movimientos").select("id", { count: "exact", head: true });
+      const [hoy, semana, total] = await Promise.all([
+        conFiltroCuentas(base().gte("created_at", desdeHaceDias(0))),
+        conFiltroCuentas(base().gte("created_at", desdeHaceDias(7))),
+        conFiltroCuentas(base()),
+      ]);
+      if (cancelado) return;
+      setTotales({ hoy: hoy.count || 0, semana: semana.count || 0, total: total.count || 0 });
+    })();
+    return () => { cancelado = true; };
+  }, [filtroListo, cuentaIdsFiltro?.join(",")]);
+
+  useEffect(() => {
+    if (!filtroListo) return;
     let cancelado = false;
     (async () => {
       setLoading(true);
@@ -111,12 +164,13 @@ export default function RecientesPage() {
 
       let q = supabase
         .from("movimientos")
-        .select("id, fecha, tipo, monto, nombre_tercero, concepto, created_at, cuentas_bancarias(banco, moneda, empresas(codigo)), centros_costo(nombre, numero)")
+        .select("id, fecha, tipo, monto, nombre_tercero, concepto, created_at, cuenta_id, cuentas_bancarias(banco, moneda, empresa_id, empresas(codigo)), centros_costo(nombre, numero)")
         .order("created_at", { ascending: false })
         .limit(limite);
 
       const def = PERIODOS.find(p => p.id === periodo);
       if (def && def.dias !== null) q = q.gte("created_at", desdeHaceDias(def.dias));
+      q = conFiltroCuentas(q);
 
       const { data, error } = await q;
       if (cancelado) return;
@@ -125,9 +179,9 @@ export default function RecientesPage() {
       setLoading(false);
     })();
     return () => { cancelado = true; };
-  }, [periodo, limite]);
+  }, [periodo, limite, filtroListo, cuentaIdsFiltro?.join(",")]);
 
-  useEffect(() => { setLimite(PAGINA); }, [periodo]);
+  useEffect(() => { setLimite(PAGINA); }, [periodo, empresaId, cuentaId]);
 
   const cargas = useMemo(() => agruparEnCargas(movimientos), [movimientos]);
   const hayMas = movimientos.length >= limite;
@@ -144,22 +198,77 @@ export default function RecientesPage() {
             Lo último que se dio de alta en el sistema, agrupado por carga.
           </p>
         </div>
-        <div className="flex p-1 bg-zinc-100 dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800">
-          {PERIODOS.map(p => (
-            <button
-              key={p.id}
-              onClick={() => setPeriodo(p.id)}
-              className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
-                periodo === p.id
-                  ? "bg-primary text-white shadow-lg"
-                  : "text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
-              }`}
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2 bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl px-4 py-2.5">
+            <Filter className="w-4 h-4 text-zinc-400" />
+            <select
+              value={empresaId}
+              onChange={e => setEmpresaId(e.target.value)}
+              className="bg-transparent text-xs font-black uppercase text-zinc-600 dark:text-zinc-400 border-none focus:ring-0 cursor-pointer"
             >
-              {p.label}
-            </button>
-          ))}
+              <option value="todas">Todas las Empresas</option>
+              {empresas.map(e => (
+                <option key={e.id} value={String(e.id)}>{e.codigo}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex items-center gap-2 bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl px-4 py-2.5">
+            <Wallet className="w-4 h-4 text-primary" />
+            <select
+              value={cuentaId}
+              onChange={e => setCuentaId(e.target.value)}
+              className="bg-transparent text-xs font-black uppercase text-zinc-600 dark:text-zinc-400 border-none focus:ring-0 cursor-pointer max-w-[220px]"
+            >
+              <option value="todas">Todas las Cuentas</option>
+              {cuentasDisponibles.map(c => (
+                <option key={c.id} value={String(c.id)}>
+                  {c.banco} · {c.moneda}{c.descripcion ? ` · ${c.descripcion}` : ""}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex p-1 bg-zinc-100 dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800">
+            {PERIODOS.map(p => (
+              <button
+                key={p.id}
+                onClick={() => setPeriodo(p.id)}
+                className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
+                  periodo === p.id
+                    ? "bg-primary text-white shadow-lg"
+                    : "text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
+                }`}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
+
+      {hayFiltro && (
+        <div className="flex items-center gap-3 p-4 rounded-2xl bg-primary/5 border border-primary/20">
+          <Filter className="w-4 h-4 text-primary flex-shrink-0" />
+          <p className="text-xs font-bold text-zinc-700 dark:text-zinc-300">
+            Mostrando solo{" "}
+            <span className="font-black text-primary">
+              {cuentaId !== "todas"
+                ? (() => {
+                    const c = cuentas.find(x => String(x.id) === cuentaId);
+                    return c ? `${c.banco} · ${c.moneda}${c.descripcion ? ` · ${c.descripcion}` : ""}` : "la cuenta seleccionada";
+                  })()
+                : empresas.find(e => String(e.id) === empresaId)?.nombre_completo || "la empresa seleccionada"}
+            </span>
+          </p>
+          <button
+            onClick={() => { setEmpresaId("todas"); setCuentaId("todas"); }}
+            className="ml-auto text-[10px] font-black text-zinc-400 hover:text-rose-500 transition-colors uppercase tracking-widest"
+          >
+            Quitar filtro ×
+          </button>
+        </div>
+      )}
 
       {/* Resumen */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -236,7 +345,8 @@ export default function RecientesPage() {
                   <th className="px-4 py-3 text-[9px] font-black uppercase tracking-widest text-zinc-400">Tercero</th>
                   <th className="px-4 py-3 text-[9px] font-black uppercase tracking-widest text-zinc-400">Concepto</th>
                   <th className="px-4 py-3 text-[9px] font-black uppercase tracking-widest text-zinc-400">C. Costo</th>
-                  <th className="px-6 py-3 text-[9px] font-black uppercase tracking-widest text-zinc-400 text-right">Monto</th>
+                  <th className="px-4 py-3 text-[9px] font-black uppercase tracking-widest text-zinc-400 text-right">Monto</th>
+                  <th className="px-6 py-3 text-[9px] font-black uppercase tracking-widest text-zinc-400 text-right">Ver</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-50 dark:divide-zinc-900 text-xs">
@@ -275,7 +385,7 @@ export default function RecientesPage() {
                           <span className="text-zinc-300 dark:text-zinc-700">—</span>
                         )}
                       </td>
-                      <td className="px-6 py-3 text-right whitespace-nowrap">
+                      <td className="px-4 py-3 text-right whitespace-nowrap">
                         <div className="flex items-center justify-end gap-1.5">
                           {esTraspaso
                             ? <ArrowLeftRight className="w-3 h-3 text-blue-500" />
@@ -289,6 +399,16 @@ export default function RecientesPage() {
                           </span>
                           <span className="text-[9px] font-black text-zinc-400">{moneda}</span>
                         </div>
+                      </td>
+                      <td className="px-6 py-3 text-right whitespace-nowrap">
+                        <Link
+                          href={`/movimientos?movimiento=${m.id}`}
+                          title="Abrir este movimiento en el Libro Mayor"
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest text-zinc-400 hover:text-primary hover:bg-primary/10 transition-all"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5" />
+                          Abrir
+                        </Link>
                       </td>
                     </tr>
                   );

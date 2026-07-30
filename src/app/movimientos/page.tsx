@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, useMemo, useRef } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, useMemo, useRef, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   Search,
   Filter,
@@ -74,7 +74,7 @@ const ARCHIVED_COST_CENTERS = new Set([
 ]);
 
 // Sub-component for each account's ledger to manage local filters and pagination
-function AccountLedger({ account, movements, costCenters, terceros, onRefresh, isAdmin }: { account: any, movements: any[], costCenters: any[], terceros: any[], onRefresh: () => void, isAdmin: boolean }) {
+function AccountLedger({ account, movements, costCenters, terceros, onRefresh, isAdmin, focusId }: { account: any, movements: any[], costCenters: any[], terceros: any[], onRefresh: () => void, isAdmin: boolean, focusId?: string | null }) {
     const [searchTerm, setSearchTerm] = useState("");
     const [selectedCC, setSelectedCC] = useState("");
     const [selectedMonth, setSelectedMonth] = useState<string>("");
@@ -413,6 +413,39 @@ function AccountLedger({ account, movements, costCenters, terceros, onRefresh, i
         return calculateAccountBalance(movementsWithBalance);
     }, [movementsWithBalance]);
 
+    // --- Enfocar un movimiento concreto (al llegar desde "Recientes") ---
+    // Solo actúa si el movimiento pertenece a ESTA cuenta.
+    const focusRowRef = useRef<HTMLTableRowElement>(null);
+    const focusTarget = useMemo(
+        () => (focusId ? movementsWithBalance.find(m => String(m.id) === String(focusId)) : null),
+        [focusId, movementsWithBalance]
+    );
+
+    // Paso 1: se abren los filtros para que el movimiento sea visible.
+    useEffect(() => {
+        if (!focusTarget) return;
+        setSearchTerm("");
+        setSelectedCC("");
+        setSelectedMonth(focusTarget.monthKey);
+    }, [focusTarget]);
+
+    // Paso 2: ya con el filtro aplicado, se salta a su página y se hace scroll.
+    useEffect(() => {
+        if (!focusTarget) return;
+        const idx = filteredItems.findIndex(m => String(m.id) === String(focusTarget.id));
+        if (idx === -1) return;
+        const pagina = Math.floor(idx / ITEMS_PER_PAGE) + 1;
+        setCurrentPage(prev => (prev === pagina ? prev : pagina));
+    }, [focusTarget, filteredItems]);
+
+    useEffect(() => {
+        if (!focusTarget || !focusRowRef.current) return;
+        const t = setTimeout(() => {
+            focusRowRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+        }, 250);
+        return () => clearTimeout(t);
+    }, [focusTarget, currentPage, paginatedItems]);
+
     return (
         <div className="ml-4 space-y-6">
             {/* Account Header */}
@@ -615,8 +648,20 @@ function AccountLedger({ account, movements, costCenters, terceros, onRefresh, i
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-zinc-50 dark:divide-zinc-900">
-                        {paginatedItems.map((move: any) => (
-                            <tr key={move.id} className={`hover:bg-zinc-50/30 dark:hover:bg-zinc-900/30 transition-colors ${selectedIds.includes(move.id) ? "bg-primary/[0.03] dark:bg-primary/[0.05]" : ""}`}>
+                        {paginatedItems.map((move: any) => {
+                            const isFocused = focusId != null && String(move.id) === String(focusId);
+                            return (
+                            <tr
+                                key={move.id}
+                                ref={isFocused ? focusRowRef : undefined}
+                                className={`transition-colors ${
+                                    isFocused
+                                        ? "bg-amber-400/10 ring-2 ring-inset ring-amber-400/60"
+                                        : selectedIds.includes(move.id)
+                                            ? "bg-primary/[0.03] dark:bg-primary/[0.05] hover:bg-zinc-50/30 dark:hover:bg-zinc-900/30"
+                                            : "hover:bg-zinc-50/30 dark:hover:bg-zinc-900/30"
+                                }`}
+                            >
                                 <td className="px-5 py-5">
                                     {isAdmin && (
                                         <input
@@ -816,7 +861,8 @@ function AccountLedger({ account, movements, costCenters, terceros, onRefresh, i
                                     </div>
                                 </td>
                             </tr>
-                        ))}
+                            );
+                        })}
                         {paginatedItems.length === 0 && (
                             <tr>
                                 <td colSpan={10} className="px-6 py-16 text-center">
@@ -879,9 +925,26 @@ function AccountLedger({ account, movements, costCenters, terceros, onRefresh, i
     );
 }
 
+// useSearchParams necesita una frontera de Suspense para que la ruta pueda
+// seguir prerenderizándose de forma estática.
 export default function MovimientosPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex flex-col items-center justify-center h-[60vh]">
+        <Loader2 className="w-10 h-10 text-primary animate-spin" />
+      </div>
+    }>
+      <MovimientosContenido />
+    </Suspense>
+  );
+}
+
+function MovimientosContenido() {
   const { isAdmin } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  // Id del movimiento a resaltar cuando se llega desde "Recientes"
+  const focusId = searchParams.get('movimiento');
   const [loading, setLoading] = useState(true);
   const [companies, setCompanies] = useState<any[]>([]);
   const [accounts, setAccounts] = useState<any[]>([]);
@@ -965,6 +1028,21 @@ export default function MovimientosPage() {
     fetchData();
   }, []);
 
+  // Al llegar con ?movimiento=<id>, se despliega automáticamente la empresa y la
+  // cuenta a las que pertenece, para que el movimiento quede a la vista.
+  useEffect(() => {
+    if (!focusId || movements.length === 0 || accounts.length === 0) return;
+    const mov = movements.find(m => String(m.id) === String(focusId));
+    if (!mov) return;
+    const cuenta = accounts.find(a => String(a.id) === String(mov.cuenta_id));
+    if (!cuenta) return;
+
+    setExpandedSections(prev => prev.includes(cuenta.empresa_id) ? prev : [...prev, cuenta.empresa_id]);
+    setExpandedAccounts(prev => prev.includes(cuenta.id) ? prev : [...prev, cuenta.id]);
+    // La temporada podría estar filtrando y ocultarlo: se muestra todo.
+    setSelectedSeason('all');
+  }, [focusId, movements, accounts]);
+
   const toggleSection = (id: string) => {
     setExpandedSections(prev => 
         prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
@@ -1046,6 +1124,31 @@ export default function MovimientosPage() {
             )}
         </div>
       </div>
+
+      {focusId && (() => {
+        const mov = movements.find(m => String(m.id) === String(focusId));
+        return (
+          <div className="flex items-center gap-3 p-4 rounded-2xl bg-amber-400/10 border border-amber-400/30">
+            <Info className="w-5 h-5 text-amber-500 flex-shrink-0" />
+            <div>
+              <p className="text-xs font-black uppercase tracking-widest text-amber-600 dark:text-amber-400">
+                Movimiento resaltado
+              </p>
+              <p className="text-sm font-bold text-zinc-700 dark:text-zinc-300">
+                {mov
+                  ? `${formatFechaLocal(mov.fecha)} · ${mov.nombre_tercero || 'Sin tercero'} · $${Math.abs(parseFloat(mov.monto)).toLocaleString('es-MX', { minimumFractionDigits: 2 })}`
+                  : 'No se encontró el movimiento indicado.'}
+              </p>
+            </div>
+            <button
+              onClick={() => router.push('/movimientos')}
+              className="ml-auto text-xs font-black text-zinc-400 hover:text-rose-500 transition-colors uppercase tracking-widest"
+            >
+              Quitar ×
+            </button>
+          </div>
+        );
+      })()}
 
       {selectedSeason !== 'all' && (() => {
         const s = seasons.find(s => s.id.toString() === selectedSeason);
@@ -1140,6 +1243,7 @@ export default function MovimientosPage() {
                                                             terceros={terceros}
                                                             onRefresh={() => fetchData(true)}
                                                             isAdmin={isAdmin}
+                                                            focusId={focusId}
                                                         />
                                                     </motion.div>
                                                 )}
