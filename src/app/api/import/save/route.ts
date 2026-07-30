@@ -77,17 +77,24 @@ export async function POST(req: NextRequest) {
                 saldoo = currentBalance;
             }
 
+            // Si el usuario editó manualmente el beneficiario en la vista previa,
+            // se respeta tal cual lo escribió (sin pasarlo por el limpiador
+            // automático, que podría recortar o alterar el texto). Si no lo tocó,
+            // se deriva/limpia automáticamente como antes.
+            const nombreDerivado = m._descripcionEdited
+                ? ((m.descripcion || '').trim() || 'POR IDENTIFICAR')
+                : cleanTerceroName(m.descripcion || m.concepto);
+            // Nunca dejar "POR IDENTIFICAR" si hay un concepto disponible: se usa
+            // el concepto como beneficiario en su lugar.
+            const nombreFinal = nombreDerivado === 'POR IDENTIFICAR' && (m.concepto || '').trim()
+                ? m.concepto.trim()
+                : nombreDerivado;
+
             return {
                 id: crypto.randomUUID(),
-                cuenta_id: cuentaId, 
+                cuenta_id: cuentaId,
                 fecha: m.fecha,
-                // Si el usuario editó manualmente el beneficiario en la vista previa,
-                // se respeta tal cual lo escribió (sin pasarlo por el limpiador
-                // automático, que podría recortar o alterar el texto). Si no lo tocó,
-                // se deriva/limpia automáticamente como antes.
-                nombre_tercero: m._descripcionEdited
-                    ? ((m.descripcion || '').trim() || 'POR IDENTIFICAR')
-                    : cleanTerceroName(m.descripcion || m.concepto),
+                nombre_tercero: nombreFinal,
                 concepto: m.concepto,
                 monto: m.monto,
                 tipo: m.tipo,

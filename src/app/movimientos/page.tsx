@@ -336,6 +336,11 @@ function AccountLedger({ account, movements, costCenters, terceros, onRefresh, i
     const handleBulkClean = async () => {
         // Removed redundant RawMovement interface inside bulk clean function
         const toUpdate = filteredItems.filter(m => {
+            if (m.nombre_tercero === 'POR IDENTIFICAR') {
+                // Prefer a known tercero if we have one; otherwise fall back to the concepto.
+                const terc = terceros.find(t => t.nombre_raw === m.nombre_tercero);
+                return !!terc || !!(m.concepto && m.concepto.trim());
+            }
             const terc = terceros.find(t => t.nombre_raw === m.nombre_tercero);
             return terc && terc.nombre_canonico !== m.nombre_tercero;
         });
@@ -350,8 +355,9 @@ function AccountLedger({ account, movements, costCenters, terceros, onRefresh, i
         setIsUpdating("bulk");
         for (const m of toUpdate) {
             const terc = terceros.find(t => t.nombre_raw === m.nombre_tercero);
-            if (terc) {
-                await supabase.from('movimientos').update({ nombre_tercero: terc.nombre_canonico }).eq('id', m.id);
+            const nuevoNombre = terc ? terc.nombre_canonico : (m.nombre_tercero === 'POR IDENTIFICAR' ? m.concepto : null);
+            if (nuevoNombre) {
+                await supabase.from('movimientos').update({ nombre_tercero: nuevoNombre }).eq('id', m.id);
             }
         }
         alert(`✅ Se han limpiado ${toUpdate.length} nombres.`);
